@@ -1,0 +1,6 @@
+﻿__pycache__/
+tempfiles/
+*.jsonl
+.env
+.venv/
+.venv/
