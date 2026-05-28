@@ -1,51 +1,113 @@
 ﻿import json
 from pathlib import Path
+from collections import defaultdict
 from .base import BaseParser
 
+# Pricing rates per token for supported Claude model variants.
 PRICING = {
-    "claude-sonnet-4-5-20250929": {"input": 0.000001, "output": 0.000002},
-    "claude-sonnet-4-20250929": {"input": 0.000001, "output": 0.000002},
-    "claude-instant-1": {"input": 0.0000005, "output": 0.000001},
+    "claude-opus-4-20250514": {
+        "input": 0.000015,
+        "output": 0.000075,
+        "cache_read": 0.0000015,
+        "cache_write": 0.00001875
+    },
+    "claude-opus-4-6": {
+        "input": 0.000015,
+        "output": 0.000075,
+        "cache_read": 0.0000015,
+        "cache_write": 0.00001875
+    },
+    "claude-sonnet-4-20250514": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375
+    },
+    "claude-sonnet-4-5-20250929": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375
+    },
+    "claude-haiku-4-5-20251001": {
+        "input": 0.0000008,
+        "output": 0.000004,
+        "cache_read": 0.00000008,
+        "cache_write": 0.000001
+    },
 }
-DEFAULT_PRICING = {"input": 0.000001, "output": 0.000002}
+DEFAULT_PRICING = {
+    "input": 0.000003,
+    "output": 0.000015,
+    "cache_read": 0.0000003,
+    "cache_write": 0.00000375
+}
 
 class ClaudeParser(BaseParser):
-    """
-    Parser for Anthropic Claude logs.
-    """
+    """Parser implementation for Anthropic Claude JSONL session logs."""
 
-    def __init__(self, log_path: str = '~/.claude/sessions/') -> None:
+    def __init__(self, log_path: str = '~/.claude/projects/') -> None:
+        # Convert the provided path to an absolute home-expanded Path object.
         self.log_dir = Path(log_path).expanduser()
         self.runs = []
         self.total_tokens = 0
         self.total_cost = 0.0
         self.models_used = set()
         self.sessions = set()
+        self.total_cache_read = 0
+        self.total_cache_creation = 0
+        # Reasoning tokens are not explicitly tracked for Claude logs in this parser.
+        self.total_cache_read_cost = 0.0
+        self.total_cache_creation_cost = 0.0
+        self.stats_by_folder = {}
 
     def _extract_session_id(self, file_path: Path) -> str:
+        """Construct a session identifier from a log file name."""
         stem = file_path.stem
         parts = stem.split("-")
         if len(parts) >= 5:
+            # Use the trailing five components when the filename is long.
             return "-".join(parts[-5:])
         return stem
 
-    def _calculate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pricing = PRICING.get(model, DEFAULT_PRICING)
-        return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
+    def _calculate_cost(self, input_tokens, output_tokens,
+                        cache_read, cache_creation, model):
+        """Calculates the cost for a given set of tokens and model.
+
+        Args:
+            input_tokens (int): Number of input tokens (new, non-cached).
+            output_tokens (int): Number of output tokens.
+            cache_read (int): Number of cache read tokens.
+            cache_creation (int): Number of cache creation tokens.
+            model (str): The model name used for pricing.
+
+        Returns:
+            float: The calculated cost.
+        """
+        p = PRICING.get(model, DEFAULT_PRICING)
+        return (
+            input_tokens * p["input"] +
+            output_tokens * p["output"] +
+            cache_read * p.get(
+                "cache_read", p["input"] * 0.1
+            ) +
+            cache_creation * p.get(
+                "cache_write", p["input"] * 1.25
+            )
+        )
 
     def _extract_model(self, data: dict) -> str:
+        """Extract the used model name from a log record."""
         message = data.get("message") or {}
-        return message.get("model") or data.get("model") or "claude"
+        return message.get("model") or "claude"
 
     def _extract_usage(self, data: dict) -> dict:
+        """Normalize the usage payload from different Claude record shapes."""
         usage = data.get("usage")
-        if isinstance(usage, dict):
-            return usage
-        message = data.get("message") or {}
-        usage = message.get("usage")
-        return usage if isinstance(usage, dict) else {}
+        return usage if isinstance(usage, dict) else (data.get("message", {}).get("usage") if isinstance(data.get("message"), dict) else {})
 
     def parse(self) -> list[dict]:
+        """Parse Claude logs and produce a list of individual usage runs."""
         if not self.log_dir.exists():
             print(f"[CLAUDE] Error: Path {self.log_dir} not found.")
             return []
@@ -58,71 +120,191 @@ class ClaudeParser(BaseParser):
             print(f"[CLAUDE] Error: {self.log_dir} is not a file or directory.")
             return []
 
+        # Reset parser state before processing the logs.
         self.runs = []
         self.total_tokens = 0
         self.total_cost = 0.0
         self.models_used.clear()
         self.sessions.clear()
+        self.total_cache_read = 0
+        self.total_cache_creation = 0
+        # self.total_reasoning_tokens = 0 # Reasoning tokens are not tracked for Claude
+        self.total_cache_read_cost = 0.0
+        self.total_cache_creation_cost = 0.0
+        self.stats_by_folder.clear()
+        
+        request_final_usages = {}
 
         for file_path in files:
-            if not file_path.is_file():
-                continue
+            self._parse_file(file_path, request_final_usages)
 
-            session_id = self._extract_session_id(file_path)
+        for rid, entry in request_final_usages.items():
+            self.runs.append(entry)
+            self.total_tokens += entry["total_tokens"]
+            self.total_cost += entry["cost"]
+            
+            # Aggregate cache read tokens and their costs.
+            if entry["cache_read_tokens"] > 0:
+                self.total_cache_read += entry["cache_read_tokens"]
+                self.total_cache_read_cost += entry["c_read_cost"]
 
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+            # Aggregate cache creation tokens and their costs.
+            if entry["cache_creation_tokens"] > 0:
+                self.total_cache_creation += entry["cache_creation_tokens"]
+                self.total_cache_creation_cost += entry["c_create_cost"]
 
-                    usage = self._extract_usage(data)
-                    if not usage:
-                        continue
-
-                    input_tokens = usage.get("input_tokens", 0) or 0
-                    output_tokens = usage.get("output_tokens", 0) or 0
-                    total_tokens = usage.get("total_tokens") or (input_tokens + output_tokens)
-                    if input_tokens == 0 and output_tokens == 0:
-                        continue
-
-                    model = self._extract_model(data)
-                    cost = self._calculate_cost(input_tokens, output_tokens, model)
-                    sid = data.get("sessionId") or data.get("session_id") or session_id
-                    if sid:
-                        self.sessions.add(sid)
-
-                    message = data.get("message") or {}
-                    entry = {
-                        "timestamp": data.get("timestamp"),
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "total_tokens": total_tokens,
-                        "model": model,
-                        "cost": cost,
-                        "session_id": sid,
-                        "filepath": str(file_path),
-                        "role": message.get("role"),
-                        "message_type": message.get("type"),
-                        "record_type": data.get("type"),
-                    }
-                    self.runs.append(entry)
-                    self.total_tokens += total_tokens
-                    self.total_cost += cost
-                    self.models_used.add(model)
-
+            self.models_used.add(entry["model"])
+            
+            # Update stats_by_folder using the filepath from the final entry
+            folder = Path(entry["filepath"]).parent.name
+            # Ensure folder is initialized, though it should be from the first loop
+            if folder not in self.stats_by_folder:
+                 self.stats_by_folder[folder] = {"runs": 0, "tokens": 0, "cost": 0.0}
+            self.stats_by_folder[folder]["runs"] += 1
+            self.stats_by_folder[folder]["tokens"] += entry["total_tokens"]
+            self.stats_by_folder[folder]["cost"] += entry["cost"]
         return self.runs
 
+    def _parse_file(self, file_path: Path, request_final_usages: dict) -> None:
+        """Extract usage from a single Claude log file and update the buffered collection.
+
+        This method uses guard clauses to minimize nesting and improve readability.
+        It processes each line, extracts relevant usage data, and stores it in
+        `request_final_usages`, overwriting previous entries for the same request ID
+        to capture the final cumulative usage.
+
+        Args:
+            file_path (Path): The path to the JSONL log file.
+            request_final_usages (dict): A dictionary to store the latest usage entry
+                                         for each unique request ID encountered across all files.
+        """
+        if not file_path.is_file():
+            return
+
+        session_id = self._extract_session_id(file_path)
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if data.get("type") != "assistant": # Only process assistant messages for usage
+                    continue
+
+                usage = self._extract_usage(data)
+                if not usage:
+                    continue
+
+                input_tokens = usage.get("input_tokens", 0) or 0
+                output_tokens = usage.get("output_tokens", 0) or 0
+                cache_read = usage.get("cache_read_input_tokens", 0) or 0
+                cache_create = usage.get("cache_creation_input_tokens", 0) or 0
+                total_tokens = input_tokens + cache_create + cache_read + output_tokens
+
+                if total_tokens == 0: # Skip if no tokens were used
+                    continue
+
+                request_id = data.get("requestId")
+                if not request_id: # Must have a request_id for de-duplication
+                    continue
+
+                model = self._extract_model(data)
+                cost = self._calculate_cost(input_tokens, output_tokens, cache_read, cache_create, model)
+                p = PRICING.get(model, DEFAULT_PRICING)
+                
+                sid = data.get("sessionId") or data.get("session_id") or session_id
+                if sid:
+                    self.sessions.add(sid) # Track unique session IDs
+                request_final_usages[request_id] = {
+                    "timestamp": data.get("timestamp"),
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                    "cache_read_tokens": cache_read,
+                    "cache_creation_tokens": cache_create,
+                    "model": model,
+                    "cost": cost,
+                    "c_read_cost": cache_read * p.get("cache_read", p["input"] * 0.1),
+                    "c_create_cost": cache_create * p.get("cache_write", p["input"] * 1.25),
+                    "filepath": str(file_path),
+                }
+
     def summary(self) -> None:
+        """Print a summary of the parsed Claude log analysis."""
         print(f"\n[CLAUDE] =========================")
         print(f"[CLAUDE] LOG ANALYSIS: {self.log_dir}")
         print(f"[CLAUDE] =========================")
-        print(f"[CLAUDE] Session ID(s):  {', '.join(self.sessions) if self.sessions else 'Unknown'}")
-        print(f"[CLAUDE] Models Used:    {', '.join(self.models_used) if self.models_used else 'None'}")
-        print(f"[CLAUDE] Total LLM Runs: {len(self.runs)}")
-        print(f"[CLAUDE] Total Tokens:   {self.total_tokens:,}")
-        print(f"[CLAUDE] Total Cost:     ${self.total_cost:.6f}")
+
+        if not self.runs:
+            print("[CLAUDE] No runs found to summarize.")
+            print(f"[CLAUDE] =========================")
+            return
+
+        # Group runs by date and model
+        # Using defaultdict to simplify aggregation
+        grouped_stats = defaultdict(lambda: defaultdict(lambda: {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_creation": 0, # Add cache creation to grouped stats
+            "cost": 0.0
+        }))
+
+        for run in self.runs:
+            date = run["timestamp"][:10] if run.get("timestamp") else "UNKNOWN_DATE"
+            model = run.get("model", "UNKNOWN_MODEL")
+
+            grouped_stats[date][model]["input"] += run.get("input_tokens", 0)
+            grouped_stats[date][model]["output"] += run.get("output_tokens", 0)
+            # Reasoning tokens are not tracked for Claude, so removed from aggregation
+            # grouped_stats[date][model]["reasoning"] += run.get("reasoning_tokens", 0)
+            grouped_stats[date][model]["cache_read"] += run.get("cache_read_tokens", 0)
+            grouped_stats[date][model]["cache_creation"] += run.get("cache_creation_tokens", 0) # Aggregate cache creation
+            grouped_stats[date][model]["cost"] += run.get("cost", 0.0)
+
+        # Print table header
+        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Cache Create':>12} {'Cache Read':>10} {'Cost':>8}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*8}")
+
+        # Print grouped data
+        total_input_agg = 0
+        total_output_agg = 0
+        total_cache_read_agg = 0
+        total_cache_creation_agg = 0 # Initialize aggregate for cache creation
+        total_cost_agg = 0.0
+
+        for date in sorted(grouped_stats.keys()):
+            for model in sorted(grouped_stats[date].keys()):
+                stats = grouped_stats[date][model]
+                input_t = stats["input"]
+                output_t = stats["output"]
+                cache_r = stats["cache_read"]
+                cache_c = stats["cache_creation"] # Get cache creation for current row
+                cost_v = stats["cost"]
+
+                total_input_agg += input_t
+                total_output_agg += output_t
+                total_cache_read_agg += cache_r
+                total_cache_creation_agg += cache_c # Aggregate cache creation
+                total_cost_agg += cost_v
+
+                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {cache_c:>12,} {cache_r:>10,} {cost_v:>8.2f}")
+
+        # Print totals row
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*8}")
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_cache_creation_agg:>12,} {total_cache_read_agg:>10,} {total_cost_agg:>8.2f}")
+        print(f"[CLAUDE] =========================")
+
+        # Additional metrics using the overall totals from parsing
+        # Total cached includes both read and write/creation for Claude
+        total_cached = self.total_cache_read + self.total_cache_creation
+        cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
+        projected_monthly_cost = self.total_cost * 30
+
+        print(f"[CLAUDE] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
+        print(f"[CLAUDE] Projected monthly cost:          ~${projected_monthly_cost:.2f}")
         print(f"[CLAUDE] =========================")

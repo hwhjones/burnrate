@@ -29,17 +29,38 @@ pip install -U pip
 
 ## Usage
 
-From the repository root:
+From the repository root, run the main entrypoint:
 
 ```powershell
 python main.py
 ```
 
-`main.py` imports `CodexParser` and `ClaudeParser` from the `parsers` package and currently runs `CodexParser` by default.
+This will run the default parser (`codex`) against the default log path configured in `main.py`.
 
-### Custom log file
+By default, `python main.py` uses:
 
-If you want to use a different log file, update `parsers/codex_parser.py` to accept a path or modify `main.py` to pass a `log_path` to `CodexParser`.
+- parser: `codex`
+- log path: `~/.codex/sessions/`
+
+### Run with explicit parser selection
+
+Use the `--parser` flag to choose between the built-in parsers.
+
+```powershell
+python main.py --parser codex
+python main.py --parser claude
+```
+
+### Run with a custom log path
+
+Use the `--log-path` flag to analyze a specific file or directory:
+
+```powershell
+python main.py --parser codex --log-path C:\path\to\logs
+python main.py --parser claude --log-path C:\path\to\claude\sessions\
+```
+
+The parser class and log path are selected from `PARSER_MAP` in `main.py`, so this is the preferred way to run the tool.
 
 ## Testing
 
@@ -53,8 +74,9 @@ python tests/test_codex_parser.py
 
 - `parsers/base.py` defines the parser interface.
 - `parsers/codex_parser.py` is the main implementation for Rollout-style JSONL token count logs.
-- `parsers/claude_parser.py` is currently a stub and requires a real Claude log parser implementation.
-- `tests/test_codex_parser.py` should be refactored into a proper `pytest` test case with assertions and temporary file handling.
+- `parsers/claude_parser.py` now includes a robust implementation for Claude logs. It uses a buffered aggregation strategy to correctly de-duplicate cumulative usage reports.
+- `tests/test_codex_parser.py` and `tests/test_claude_parser.py` are now structured as `unittest.TestCase` classes with basic parsing and summary output assertions.
+- Both parsers implement a "Collection Pass" and "Aggregation Pass" to handle cumulative usage reporting in logs, ensuring accurate de-duplication by request ID.
 
 ## Future improvements
 

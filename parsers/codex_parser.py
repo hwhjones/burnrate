@@ -1,25 +1,82 @@
 import json
-import re
 from pathlib import Path
+from collections import defaultdict
 from .base import BaseParser
 
-# Pricing constants
+# Pricing rates used when no explicit model mapping exists in Codex logs.
 PRICING = {
-    "gpt-4o-mini": {"input": 0.00000015, "output": 0.0000006},
+    "gpt-5.5": {
+        "input": 0.000005,
+        "output": 0.000030,
+        "cache_read": 0.0000005,
+        "cache_write": 0.000006250
+        # Note: Codex logs do not currently expose 'cache_write' tokens directly in usage.
+    },
+    "gpt-5.5-pro": {
+        "input": 0.000030,
+        "output": 0.000180,
+        "cache_read": 0.000003,
+        "cache_write": 0.0000375
+    },
+    # ... (other pricing entries remain unchanged)
+    "gpt-5.4": {
+        "input": 0.0000025,
+        "output": 0.000015,
+        "cache_read": 0.00000025,
+        "cache_write": 0.000003125
+    },
+    "gpt-5.4-mini": {
+        "input": 0.0000005,
+        "output": 0.000002,
+        "cache_read": 0.00000005,
+        "cache_write": 0.000000625
+    },
+    "gpt-5.4-nano": {
+        "input": 0.0000001,
+        "output": 0.0000004,
+        "cache_read": 0.00000001,
+        "cache_write": 0.000000125
+    },
+    "gpt-4o": {
+        "input": 0.0000025,
+        "output": 0.00001,
+        "cache_read": 0.00000025,
+        "cache_write": 0.000003125
+    },
+    "gpt-4o-mini": {
+        "input": 0.00000015,
+        "output": 0.0000006,
+        "cache_read": 0.000000015,
+        "cache_write": 0.0000001875
+    },
+    "o3": {
+        "input": 0.00001,
+        "output": 0.00004,
+        "cache_read": 0.000001,
+        "cache_write": 0.0000125
+    },
+    "o4-mini": {
+        "input": 0.000003,
+        "output": 0.000012,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375
+    },
 }
 
 class CodexParser(BaseParser):
+    """Parser implementation for Codex-style JSONL session logs."""
+
     def __init__(self, log_path: str = "~/.codex/sessions/") -> None:
-        raw_path = Path(log_path).expanduser()
-        if raw_path.suffix == ".jsonl":
-            self.log_dir = raw_path.parent
-        else:
-            self.log_dir = raw_path
+        self.log_dir = Path(log_path).expanduser()
         self.runs = []
         self.total_tokens = 0
         self.total_cost = 0.0
         self.models_used = set()
         self.sessions = set()
+        self.total_cache_read = 0
+        self.total_reasoning_tokens = 0
+        self.total_cache_read_cost = 0.0
+        self.stats_by_folder = {}
 
     def _extract_session_id(self, file_path: Path) -> str:
         stem = file_path.stem
@@ -28,84 +85,232 @@ class CodexParser(BaseParser):
             return "-".join(parts[-5:])
         return stem
 
-    def _calculate_cost(self, input_tokens, output_tokens, model):
+    def _calculate_cost(self, input_tokens, output_tokens, cache_read, reasoning, model):
+        """Calculates the cost for a given set of tokens and model.
+
+        Args:
+            input_tokens (int): Number of input tokens.
+            output_tokens (int): Number of output tokens.
+            cache_read (int): Number of cache read tokens.
+            reasoning (int): Number of reasoning tokens (charged at output rate).
+            model (str): The model name used for pricing.
+
+        Returns:
+            float: The calculated cost.
+        """
         p = PRICING.get(model, PRICING["gpt-4o-mini"])
-        return (input_tokens * p["input"]) + (output_tokens * p["output"])
+        return (
+            input_tokens * p["input"] +
+            output_tokens * p["output"] +
+            reasoning * p["output"] + # Reasoning tokens are charged at output token rates
+            cache_read * p.get("cache_read", p["input"] * 0.1)
+        )
 
     def parse(self) -> list[dict]:
+        """Parse Codex logs into individual usage entries and aggregate totals."""
         if not self.log_dir.exists():
             print(f"[CODEX] Error: Directory {self.log_dir} not found.")
             return []
 
-        if not self.log_dir.is_dir():
-            print(f"[CODEX] Error: {self.log_dir} is not a directory.")
-            return []
 
         self.runs = []
         self.total_tokens = 0
         self.total_cost = 0.0
         self.models_used.clear()
         self.sessions.clear()
+        self.total_cache_read = 0
+        self.total_reasoning_tokens = 0
+        self.total_cache_read_cost = 0.0
+        self.stats_by_folder.clear()
 
-        for file_path in sorted(self.log_dir.glob("**/*.jsonl")):
-            if not file_path.is_file():
-                continue
+        if self.log_dir.is_file():
+            files = [self.log_dir]
+        elif self.log_dir.is_dir():
+            files = sorted(self.log_dir.glob("**/*.jsonl"))
+        else:
+            print(f"[CODEX] Error: {self.log_dir} is not a file or directory.")
+            return []
 
-            prev_input = 0
-            prev_output = 0
-            session_id = self._extract_session_id(file_path)
+        # Buffered collection: Stores the latest usage entry for each unique request ID.
+        # This prevents over-counting when logs contain multiple cumulative updates for the same request.
+        request_final_usages = {}
 
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        data = json.loads(line)
-                        sid = data.get("session_id") or data.get("payload", {}).get("session_id") or session_id
-                        if sid:
-                            self.sessions.add(sid)
+        for file_path in files:
+            # Process each log file to populate the buffered collection.
+            self._parse_file(file_path, request_final_usages)
 
-                        if data.get("type") == "event_msg":
-                            payload = data.get("payload") or {}
-                            if payload.get("type") == "token_count":
-                                info = payload.get("info") or {}
-                                model = info.get("model", "gpt-4o-mini")
-                                usage = info.get("last_token_usage") or {}
-                                if usage:
-                                    input_cum = usage.get("input_tokens", 0)
-                                    output_cum = usage.get("output_tokens", 0)
-                                    delta_in = max(0, input_cum - prev_input)
-                                    delta_out = max(0, output_cum - prev_output)
+        for entry in request_final_usages.values():
+            self.runs.append(entry)
+            self.total_tokens += entry["total_tokens"]
+            self.total_cost += entry["cost"]
+            self.models_used.add(entry["model"])
+            
+            # Aggregate cache read tokens and their costs.
+            if entry["cache_read_tokens"] > 0:
+                self.total_cache_read += entry["cache_read_tokens"]
+                self.total_cache_read_cost += entry["c_read_cost"]
+            
 
-                                    if delta_in > 0 or delta_out > 0:
-                                        cost = self._calculate_cost(delta_in, delta_out, model)
-                                        entry = {
-                                            "timestamp": data.get("timestamp"),
-                                            "input_tokens": delta_in,
-                                            "model": model,
-                                            "output_tokens": delta_out,
-                                            "total_tokens": delta_in + delta_out,
-                                            "cost": cost,
-                                            "session_id": session_id,
-                                            "filepath": str(file_path),
-                                        }
-                                        self.runs.append(entry)
-                                        self.total_tokens += entry["total_tokens"]
-                                        self.total_cost += cost
-                                        self.models_used.add(model)
-                                        prev_input = input_cum
-                                        prev_output = output_cum
-                    except json.JSONDecodeError:
-                        continue
+            self.total_reasoning_tokens += entry["reasoning_tokens"]
+            
+            folder = Path(entry["filepath"]).parent.name
+            if folder not in self.stats_by_folder:
+                self.stats_by_folder[folder] = {"runs": 0, "tokens": 0, "cost": 0.0}
+            
+            self.stats_by_folder[folder]["runs"] += 1
+            self.stats_by_folder[folder]["tokens"] += entry["total_tokens"]
+            self.stats_by_folder[folder]["cost"] += entry["cost"]
+
         return self.runs
 
+    def _parse_file(self, file_path: Path, request_final_usages: dict) -> None:
+        """Parse a single Codex log file and update the buffered collection of final usages.
+
+        Args:
+            file_path (Path): The path to the JSONL log file.
+            request_final_usages (dict): A dictionary to store the latest usage entry
+                                         for each unique request ID encountered across all files.
+                                         This handles cumulative updates in logs.
+        """
+        if not file_path.is_file():
+            return
+
+        folder = file_path.parent.name
+        current_model = "gpt-4o-mini" # Initialize current_model for this file
+        session_id = self._extract_session_id(file_path)
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    msg_type = data.get("type")
+
+                    if msg_type == "turn_context":
+                        current_model = data.get("payload", {}).get("model", current_model)
+                        continue
+
+                    # Guard clauses for early exit
+                    if msg_type == "response_item":
+                        continue
+                    if msg_type != "event_msg":
+                        continue
+                    
+                    payload = data.get("payload")
+                    if not payload or payload.get("type") != "token_count":
+                        continue
+                    
+                    info = payload.get("info")
+                    if not info:
+                        continue
+
+                    usage = info.get("last_token_usage")
+                    if not usage:
+                        continue
+
+                    model = info.get("model") or current_model # Use current_model as fallback
+
+                    sid = data.get("session_id") or data.get("payload", {}).get("session_id") or session_id
+                    if sid:
+                        self.sessions.add(sid)
+
+                    gross_input = usage.get("input_tokens", 0) or 0
+                    cache_read = usage.get("cached_input_tokens", 0) or 0
+                    input_tokens = max(0, gross_input - cache_read) # Net input
+                    output_tokens = usage.get("output_tokens", 0) or 0
+                    reasoning = usage.get("reasoning_output_tokens", 0) or 0
+                    total_tokens = input_tokens + output_tokens + cache_read
+
+                    request_id = data.get("requestId") or f"{session_id}_{data.get('timestamp')}" # Synthetic request_id
+                    cost = self._calculate_cost(input_tokens, output_tokens, cache_read, reasoning, model)
+                    p = PRICING.get(model, PRICING["gpt-4o-mini"])
+
+                    # Store the latest entry for this requestId (cumulative usage)
+                    request_final_usages[request_id] = {
+                        "timestamp": data.get("timestamp"),
+                        "input_tokens": input_tokens,
+                        "model": model,
+                        "output_tokens": output_tokens,
+                        "reasoning_tokens": reasoning,
+                        "total_tokens": total_tokens,
+                        "cache_read_tokens": cache_read,
+                        "cost": cost,
+                        "c_read_cost": cache_read * p.get("cache_read", p["input"] * 0.1),
+                        "filepath": str(file_path),
+                    }
+                except json.JSONDecodeError:
+                    continue
+
     def summary(self):
+        """Print a summary of the parsed Codex log analysis."""
         print(f"\n[CODEX] =========================")
         print(f"[CODEX] LOG ANALYSIS: {self.log_dir}")
         print(f"[CODEX] =========================")
-        print(f"[CODEX] Session ID(s):  {', '.join(self.sessions) if self.sessions else 'Unknown'}")
-        print(f"[CODEX] Models Used:    {', '.join(self.models_used) if self.models_used else 'None'}")
-        print(f"[CODEX] Total LLM Runs: {len(self.runs)}")
-        print(f"[CODEX] Total Tokens:   {self.total_tokens:,}")
-        print(f"[CODEX] Total Cost:     ${self.total_cost:.6f}")
+
+        if not self.runs:
+            print("[CODEX] No runs found to summarize.")
+            print(f"[CODEX] =========================")
+            return
+
+        # Group runs by date and model
+        # Using defaultdict to simplify aggregation
+        grouped_stats = defaultdict(lambda: defaultdict(lambda: {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cost": 0.0
+        }))
+
+        for run in self.runs:
+            date = run["timestamp"][:10] if run.get("timestamp") else "UNKNOWN_DATE"
+            model = run.get("model", "UNKNOWN_MODEL")
+            
+            grouped_stats[date][model]["input"] += run.get("input_tokens", 0)
+            grouped_stats[date][model]["output"] += run.get("output_tokens", 0)
+            grouped_stats[date][model]["reasoning"] += run.get("reasoning_tokens", 0)
+            grouped_stats[date][model]["cache_read"] += run.get("cache_read_tokens", 0)
+            grouped_stats[date][model]["cost"] += run.get("cost", 0.0)
+
+        # Print table header
+        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Reasoning':>9} {'Cache Read':>10} {'Cost':>8}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*8}")
+
+        # Print grouped data
+        total_input_agg = 0
+        total_output_agg = 0
+        total_reasoning_agg = 0
+        total_cache_read_agg = 0
+        total_cost_agg = 0.0
+
+        for date in sorted(grouped_stats.keys()):
+            for model in sorted(grouped_stats[date].keys()):
+                stats = grouped_stats[date][model]
+                input_t = stats["input"]
+                output_t = stats["output"]
+                reasoning_t = stats["reasoning"]
+                cache_r = stats["cache_read"]
+                cost_v = stats["cost"]
+
+                total_input_agg += input_t
+                total_output_agg += output_t
+                total_reasoning_agg += reasoning_t
+                total_cache_read_agg += cache_r
+                total_cost_agg += cost_v
+
+                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {reasoning_t:>9,} {cache_r:>10,} {cost_v:>8.2f}")
+
+        # Print totals row
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*8}")
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_agg:>8.2f}")
+        print(f"[CODEX] =========================")
+
+        # Additional metrics using the overall totals from parsing
+        total_cached = self.total_cache_read
+        cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
+        projected_monthly_cost = self.total_cost * 30
+
+        print(f"[CODEX] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
+        print(f"[CODEX] Projected monthly cost:          ~${projected_monthly_cost:.2f}")
         print(f"[CODEX] =========================")
