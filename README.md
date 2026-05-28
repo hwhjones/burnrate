@@ -80,8 +80,5 @@ python tests/test_codex_parser.py
 
 ## Future improvements
 
-- Add explicit CLI arguments for parser selection and log path
 - Replace `print()` output with structured return values and logging
-- Improve session handling and reset-aware delta calculation in `CodexParser`
-- Add real `ClaudeParser` support
 - Add a `requirements.txt` or `pyproject.toml` for dependency management
