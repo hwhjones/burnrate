@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+
+[project]
+name = "burnrate"
+version = "0.1.0"
+description = "Parse LLM usage logs and estimate token usage and cost"
+readme = "README.md"
+requires-python = ">=3.7"
+
+[project.scripts]
+burnrate = "burnrate.main:run"

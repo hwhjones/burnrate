@@ -1,6 +1,61 @@
-﻿__pycache__/
-tempfiles/
-*.jsonl
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Test files
+pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration
 .env
-.venv/
-.venv/
+.env.local
+
+# Temporary files
+tempfiles/
+*.tmp
+*.temp
+
+# JSONL files (log files)
+*.jsonl
+
+# Cache directories
+*/__pycache__/
+*/.pytest_cache/

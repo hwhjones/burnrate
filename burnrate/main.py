@@ -1,5 +1,5 @@
 import argparse
-from parsers import CodexParser, ClaudeParser
+from .parsers import CodexParser, ClaudeParser
 
 # Default locations for user session logs. These paths can be overridden by the --log-path argument.
 DEFAULT_CODEX_LOG = "~/.codex/sessions/"

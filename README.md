@@ -14,8 +14,20 @@ BurnRate is a small Python utility for parsing LLM usage logs and estimating tok
 
 ## Requirements
 
-- Python 3.11+ (project has been developed against Python 3.14)
-- A virtual environment is recommended
+- Python 3.7+
+- No external dependencies (uses standard library only)
+
+## Installation
+
+Install BurnRate as a package:
+
+```bash
+# From the repository directory
+pip install -e .
+
+# Or install from GitHub directly (once published)
+pip install git+https://github.com/yourusername/burnrate.git
+```
 
 ## Setup
 
@@ -23,11 +35,14 @@ BurnRate is a small Python utility for parsing LLM usage logs and estimating tok
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -U pip
+pip install -e .
 ```
 
 > There is no dependency file currently defined, so the project only requires the standard library.
 
 ## Usage
+
+### Traditional Usage (Legacy Support)
 
 From the repository root, run the main entrypoint:
 
@@ -42,7 +57,7 @@ By default, `python main.py` uses:
 - parser: `codex`
 - log path: `~/.codex/sessions/`
 
-### Run with explicit parser selection
+#### Run with explicit parser selection
 
 Use the `--parser` flag to choose between the built-in parsers.
 
@@ -51,7 +66,7 @@ python main.py --parser codex
 python main.py --parser claude
 ```
 
-### Run with a custom log path
+#### Run with a custom log path
 
 Use the `--log-path` flag to analyze a specific file or directory:
 
@@ -61,6 +76,36 @@ python main.py --parser claude --log-path C:\path\to\claude\sessions\
 ```
 
 The parser class and log path are selected from `PARSER_MAP` in `main.py`, so this is the preferred way to run the tool.
+
+### Modern Package Usage (Recommended)
+
+After installation, you can use BurnRate in multiple ways:
+
+#### As a Command Line Tool
+```bash
+# Global command - works from any directory
+burnrate --parser codex
+burnrate --parser claude
+burnrate --parser codex --log-path /custom/path/to/logs
+
+# Get help
+burnrate --help
+```
+
+#### As a Python Module
+```bash
+# Module execution - works from any directory
+python -m burnrate --parser codex
+python -m burnrate --parser claude --log-path /path/to/logs
+```
+
+#### As an Importable Package
+```python
+import burnrate
+
+# The existing run() function can be called programmatically
+# (Note: for programmatic usage, you'll need to handle arguments manually)
+```
 
 ## Testing
 
