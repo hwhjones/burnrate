@@ -93,7 +93,7 @@ class CodexParser(BaseParser):
             input_tokens (int): Number of input tokens.
             output_tokens (int): Number of output tokens.
             cache_read (int): Number of cache read tokens.
-            reasoning (int): Number of reasoning tokens (charged at output rate).
+            reasoning (int): Number of reasoning tokens included in output_tokens.
             model (str): The model name used for pricing.
 
         Returns:
@@ -103,7 +103,6 @@ class CodexParser(BaseParser):
         return (
             input_tokens * p["input"] +
             output_tokens * p["output"] +
-            reasoning * p["output"] + # Reasoning tokens are charged at output token rates
             cache_read * p.get("cache_read", p["input"] * 0.1)
         )
 
