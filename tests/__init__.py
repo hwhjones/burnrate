@@ -1,0 +1,1 @@
+"""BurnRate test suite."""

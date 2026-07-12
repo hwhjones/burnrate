@@ -1,15 +1,11 @@
 import json
-import sys
 import unittest
 from unittest.mock import patch
 from io import StringIO
 from pathlib import Path
 
-# Ensure we can import from the repository root for local parser tests.
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Import the CodexParser and its pricing dictionary for accurate test calculations.
-from parsers.codex_parser import CodexParser, PRICING
+from burnrate.parsers.codex_parser import CodexParser, PRICING
 
 
 class TestCodexParser(unittest.TestCase):

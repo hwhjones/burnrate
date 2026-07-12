@@ -1,15 +1,11 @@
-import os
 import json
-import sys
 import unittest
 from unittest.mock import patch
 from io import StringIO
 from pathlib import Path
 
-# Ensure we can import from the repository root for local parser tests.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Import the ClaudeParser for testing.
-from parsers.claude_parser import ClaudeParser
+from burnrate.parsers.claude_parser import ClaudeParser
 
 
 class TestClaudeParser(unittest.TestCase):

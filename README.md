@@ -1,129 +1,126 @@
 # BurnRate
 
-BurnRate is a small Python utility for parsing LLM usage logs and estimating token usage and cost.
+BurnRate is a small, dependency-free Python utility that parses Codex and Claude JSONL session logs, summarizes token usage, and estimates cost.
 
-## Project structure
+## Features
 
-- `main.py` — top-level entrypoint for running the analysis
-- `parsers/` — parser package containing log parser implementations
-  - `base.py` — parser interface definition
-  - `codex_parser.py` — example parser for `rollout-*.jsonl` usage logs
-  - `claude_parser.py` — placeholder parser for Claude logs
-- `tests/` — parser test coverage
-  - `test_codex_parser.py`
+- Parse a single JSONL log file or recursively scan a directory.
+- Support Codex rollout logs and Claude project logs.
+- Report input, output, cached, and reasoning-token usage where available.
+- Group usage and estimated cost by date and model.
+- Estimate a 30-day cost from the observed calendar range.
+- Report unknown models as unpriced instead of silently applying fallback rates.
 
 ## Requirements
 
-- Python 3.7+
-- No external dependencies (uses standard library only)
+- Python 3.9 or newer
+- No third-party runtime dependencies
 
 ## Installation
 
-Install BurnRate as a package:
-
-```bash
-# From the repository directory
-pip install -e .
-
-# Or install from GitHub directly (once published)
-pip install git+https://github.com/yourusername/burnrate.git
-```
-
-## Setup
+Create a virtual environment and install BurnRate from the repository:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -U pip
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-> There is no dependency file currently defined, so the project only requires the standard library.
+Alternatively, install it directly from GitHub:
+
+```powershell
+python -m pip install git+https://github.com/hwhjones/burnrate.git
+```
 
 ## Usage
 
-### Traditional Usage (Legacy Support)
-
-From the repository root, run the main entrypoint:
+After installation, run BurnRate as a command-line tool:
 
 ```powershell
-python main.py
-```
-
-This will run the default parser (`codex`) against the default log path configured in `main.py`.
-
-By default, `python main.py` uses:
-
-- parser: `codex`
-- log path: `~/.codex/sessions/`
-
-#### Run with explicit parser selection
-
-Use the `--parser` flag to choose between the built-in parsers.
-
-```powershell
-python main.py --parser codex
-python main.py --parser claude
-```
-
-#### Run with a custom log path
-
-Use the `--log-path` flag to analyze a specific file or directory:
-
-```powershell
-python main.py --parser codex --log-path C:\path\to\logs
-python main.py --parser claude --log-path C:\path\to\claude\sessions\
-```
-
-The parser class and log path are selected from `PARSER_MAP` in `main.py`, so this is the preferred way to run the tool.
-
-### Modern Package Usage (Recommended)
-
-After installation, you can use BurnRate in multiple ways:
-
-#### As a Command Line Tool
-```bash
-# Global command - works from any directory
 burnrate --parser codex
 burnrate --parser claude
-burnrate --parser codex --log-path /custom/path/to/logs
+```
 
-# Get help
+It can also be run as a Python module:
+
+```powershell
+python -m burnrate --parser codex
+python -m burnrate --parser claude
+```
+
+The default log directories are:
+
+- Codex: `~/.codex/sessions/`
+- Claude: `~/.claude/projects/`
+
+Use `--log-path` to analyze a specific JSONL file or directory:
+
+```powershell
+burnrate --parser codex --log-path C:\path\to\codex\logs
+burnrate --parser claude --log-path C:\path\to\claude\logs
+```
+
+Display all command-line options with:
+
+```powershell
 burnrate --help
 ```
 
-#### As a Python Module
-```bash
-# Module execution - works from any directory
-python -m burnrate --parser codex
-python -m burnrate --parser claude --log-path /path/to/logs
-```
+## Python usage
 
-#### As an Importable Package
+Parsers can also be used directly:
+
 ```python
-import burnrate
+from burnrate.parsers import CodexParser
 
-# The existing run() function can be called programmatically
-# (Note: for programmatic usage, you'll need to handle arguments manually)
+parser = CodexParser("path/to/logs")
+runs = parser.parse()
+parser.summary()
 ```
+
+`parse()` returns the parsed usage records and populates aggregate values on the parser instance.
+
+## Cost estimates
+
+Pricing is defined by the static model tables bundled with BurnRate. These rates may need updating when providers change their prices or introduce new models.
+
+Unknown models are still included in token totals, but they are displayed as `UNPRICED`. When unpriced models are present, cost totals and projections are marked as incomplete.
+
+The projected 30-day cost is calculated from the average daily cost across the inclusive calendar range between the earliest and latest parsed records. A short observation period may produce a volatile projection.
 
 ## Testing
 
-Run the existing test script directly:
+Run the complete test suite from the repository root:
 
 ```powershell
-python tests/test_codex_parser.py
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-## Notes and recommendations
+If the virtual environment is already activated:
 
-- `parsers/base.py` defines the parser interface.
-- `parsers/codex_parser.py` is the main implementation for Rollout-style JSONL token count logs.
-- `parsers/claude_parser.py` now includes a robust implementation for Claude logs. It uses a buffered aggregation strategy to correctly de-duplicate cumulative usage reports.
-- `tests/test_codex_parser.py` and `tests/test_claude_parser.py` are now structured as `unittest.TestCase` classes with basic parsing and summary output assertions.
-- Both parsers implement a "Collection Pass" and "Aggregation Pass" to handle cumulative usage reporting in logs, ensuring accurate de-duplication by request ID.
+```powershell
+python -m unittest discover -s tests -v
+```
 
-## Future improvements
+## Project structure
 
-- Replace `print()` output with structured return values and logging
-- Add a `requirements.txt` or `pyproject.toml` for dependency management
+```text
+burnrate/
+|-- burnrate/
+|   |-- __main__.py
+|   |-- main.py
+|   `-- parsers/
+|       |-- base.py
+|       |-- codex_parser.py
+|       `-- claude_parser.py
+|-- tests/
+|   |-- test_codex_parser.py
+|   `-- test_claude_parser.py
+|-- pyproject.toml
+`-- README.md
+```
+
+## License
+
+BurnRate is available under the MIT License. See [LICENSE](LICENSE) for details.
