@@ -224,6 +224,40 @@ class TestClaudeParser(unittest.TestCase):
         self.assertIn("claude-unknown", output)
         self.assertIn("incomplete", output)
 
+    def test_malformed_and_non_object_records_are_skipped(self):
+        """Claude skips damaged or non-object JSON and continues to valid usage."""
+        test_filename = self.test_dir / "mock_claude_malformed.jsonl"
+        valid_record = {
+            "type": "assistant",
+            "requestId": "valid-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                },
+            },
+        }
+        malformed_lines = [
+            "not valid JSON",
+            "{}",
+            "[]",
+            "null",
+            "42",
+            json.dumps({"type": "assistant"}),
+            json.dumps({"type": "assistant", "message": None}),
+            json.dumps(valid_record),
+        ]
+        test_filename.write_text("\n".join(malformed_lines) + "\n", encoding="utf-8")
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        runs = parser.parse()
+
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["total_tokens"], 120)
+        self.assertEqual(parser.total_tokens, 120)
+
     def test_missing_path_clears_previous_results(self):
         """Claude clears previous results when a later parse path is missing."""
         test_filename = self.test_dir / "mock_claude_state.jsonl"

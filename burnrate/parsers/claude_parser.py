@@ -192,6 +192,9 @@ class ClaudeParser(BaseParser):
                 except json.JSONDecodeError:
                     continue
 
+                if not isinstance(data, dict):
+                    continue
+
                 if data.get("type") != "assistant": # Only process assistant messages for usage
                     continue
 

@@ -191,6 +191,8 @@ class CodexParser(BaseParser):
                     continue
                 try:
                     data = json.loads(line)
+                    if not isinstance(data, dict):
+                        continue
                     msg_type = data.get("type")
 
                     if msg_type == "turn_context":
