@@ -234,6 +234,109 @@ class TestCodexParser(unittest.TestCase):
         self.assertEqual(parser.sessions, set())
         self.assertEqual(parser.unknown_models, set())
 
+    def test_repeated_parse_does_not_duplicate_results(self):
+        """Codex produces identical state when the same file is parsed twice."""
+        test_filename = self.test_dir / "mock_codex_repeated.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "event_msg",
+            "session_id": "repeat-session",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "model": "gpt-5.5",
+                    "last_token_usage": {
+                        "input_tokens": 100,
+                        "cached_input_tokens": 20,
+                        "output_tokens": 30,
+                        "reasoning_output_tokens": 5,
+                    },
+                },
+            },
+        }])
+
+        parser = CodexParser(log_path=str(test_filename))
+        first_runs = parser.parse().copy()
+        first_state = (
+            parser.total_tokens,
+            parser.total_cost,
+            parser.total_cache_read,
+            parser.total_reasoning_tokens,
+            parser.models_used.copy(),
+            parser.sessions.copy(),
+            parser.stats_by_folder.copy(),
+        )
+
+        second_runs = parser.parse().copy()
+        second_state = (
+            parser.total_tokens,
+            parser.total_cost,
+            parser.total_cache_read,
+            parser.total_reasoning_tokens,
+            parser.models_used.copy(),
+            parser.sessions.copy(),
+            parser.stats_by_folder.copy(),
+        )
+
+        self.assertEqual(second_runs, first_runs)
+        self.assertEqual(second_state, first_state)
+
+    def test_switching_paths_replaces_all_parser_state(self):
+        """Codex replaces known-model state with unknown and then empty input."""
+        known_file = self.test_dir / "known.jsonl"
+        unknown_file = self.test_dir / "unknown.jsonl"
+        empty_dir = self.test_dir / "empty"
+        empty_dir.mkdir()
+        self._create_mock_log(known_file, [{
+            "type": "event_msg",
+            "session_id": "known-session",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "payload": {"type": "token_count", "info": {
+                "model": "gpt-5.5",
+                "last_token_usage": {
+                    "input_tokens": 100,
+                    "cached_input_tokens": 20,
+                    "output_tokens": 30,
+                    "reasoning_output_tokens": 5,
+                },
+            }},
+        }])
+        self._create_mock_log(unknown_file, [{
+            "type": "event_msg",
+            "session_id": "unknown-session",
+            "timestamp": "2026-05-26T20:00:00Z",
+            "payload": {"type": "token_count", "info": {
+                "model": "gpt-unknown",
+                "last_token_usage": {"input_tokens": 10, "output_tokens": 2},
+            }},
+        }])
+
+        parser = CodexParser(log_path=str(known_file))
+        parser.parse()
+        self.assertGreater(parser.total_cost, 0)
+        self.assertEqual(parser.total_cache_read, 20)
+        self.assertEqual(parser.total_reasoning_tokens, 5)
+
+        parser.log_dir = unknown_file
+        parser.parse()
+        self.assertEqual(parser.total_tokens, 12)
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.total_cache_read, 0)
+        self.assertEqual(parser.total_reasoning_tokens, 0)
+        self.assertEqual(parser.models_used, {"gpt-unknown"})
+        self.assertEqual(parser.sessions, {"unknown-session"})
+        self.assertEqual(parser.unknown_models, {"gpt-unknown"})
+
+        parser.log_dir = empty_dir
+        self.assertEqual(parser.parse(), [])
+        self.assertEqual(parser.total_tokens, 0)
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.models_used, set())
+        self.assertEqual(parser.sessions, set())
+        self.assertEqual(parser.unknown_models, set())
+        self.assertEqual(parser.stats_by_folder, {})
+        empty_dir.rmdir()
+
 
 if __name__ == "__main__":
     unittest.main()

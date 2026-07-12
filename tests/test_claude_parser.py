@@ -290,5 +290,108 @@ class TestClaudeParser(unittest.TestCase):
         self.assertEqual(parser.sessions, set())
         self.assertEqual(parser.unknown_models, set())
 
+    def test_repeated_parse_does_not_duplicate_results(self):
+        """Claude produces identical state when the same file is parsed twice."""
+        test_filename = self.test_dir / "mock_claude_repeated.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "sessionId": "repeat-session",
+            "requestId": "repeat-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        first_runs = parser.parse().copy()
+        first_state = (
+            parser.total_tokens,
+            parser.total_cost,
+            parser.total_cache_read,
+            parser.total_cache_creation,
+            parser.models_used.copy(),
+            parser.sessions.copy(),
+            parser.stats_by_folder.copy(),
+        )
+
+        second_runs = parser.parse().copy()
+        second_state = (
+            parser.total_tokens,
+            parser.total_cost,
+            parser.total_cache_read,
+            parser.total_cache_creation,
+            parser.models_used.copy(),
+            parser.sessions.copy(),
+            parser.stats_by_folder.copy(),
+        )
+
+        self.assertEqual(second_runs, first_runs)
+        self.assertEqual(second_state, first_state)
+
+    def test_switching_paths_replaces_all_parser_state(self):
+        """Claude replaces known-model state with unknown and then empty input."""
+        known_file = self.test_dir / "known.jsonl"
+        unknown_file = self.test_dir / "unknown.jsonl"
+        empty_dir = self.test_dir / "empty"
+        empty_dir.mkdir()
+        self._create_mock_log(known_file, [{
+            "type": "assistant",
+            "sessionId": "known-session",
+            "requestId": "known-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
+        self._create_mock_log(unknown_file, [{
+            "type": "assistant",
+            "sessionId": "unknown-session",
+            "requestId": "unknown-request",
+            "timestamp": "2026-05-26T20:00:00Z",
+            "message": {
+                "model": "claude-unknown",
+                "usage": {"input_tokens": 10, "output_tokens": 2},
+            },
+        }])
+
+        parser = ClaudeParser(log_path=str(known_file))
+        parser.parse()
+        self.assertGreater(parser.total_cost, 0)
+        self.assertEqual(parser.total_cache_read, 40)
+        self.assertEqual(parser.total_cache_creation, 10)
+
+        parser.log_dir = unknown_file
+        parser.parse()
+        self.assertEqual(parser.total_tokens, 12)
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.total_cache_read, 0)
+        self.assertEqual(parser.total_cache_creation, 0)
+        self.assertEqual(parser.models_used, {"claude-unknown"})
+        self.assertEqual(parser.sessions, {"unknown-session"})
+        self.assertEqual(parser.unknown_models, {"claude-unknown"})
+
+        parser.log_dir = empty_dir
+        self.assertEqual(parser.parse(), [])
+        self.assertEqual(parser.total_tokens, 0)
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.models_used, set())
+        self.assertEqual(parser.sessions, set())
+        self.assertEqual(parser.unknown_models, set())
+        self.assertEqual(parser.stats_by_folder, {})
+        empty_dir.rmdir()
+
 if __name__ == "__main__":
     unittest.main()
