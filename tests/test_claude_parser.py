@@ -4,8 +4,8 @@ from unittest.mock import patch
 from io import StringIO
 from pathlib import Path
 
-# Import the ClaudeParser for testing.
-from burnrate.parsers.claude_parser import ClaudeParser
+# Import the ClaudeParser and pricing dictionary for accurate calculations.
+from burnrate.parsers.claude_parser import ClaudeParser, PRICING
 
 
 class TestClaudeParser(unittest.TestCase):
@@ -34,7 +34,7 @@ class TestClaudeParser(unittest.TestCase):
                 f.write(json.dumps(entry) + "\n")
 
     def test_parse_and_summary_basic(self):
-        """Test basic parsing and summary output with a single request."""
+        """Claude parses known-model usage and prints the expected totals."""
         test_filename = self.test_dir / "mock_claude_basic.jsonl"
         mock_data = [
             {
@@ -78,7 +78,7 @@ class TestClaudeParser(unittest.TestCase):
             self.assertIn("0.00", output) # Total cost
 
     def test_parse_and_summary_deduplication(self):
-        """Test that usage is de-duplicated by requestId, taking the last entry."""
+        """Claude keeps the latest cumulative usage for a repeated request ID."""
         test_filename = self.test_dir / "mock_claude_dedup.jsonl"
         # Simulate multiple messages for the same requestId, with cumulative usage
         mock_data = [
@@ -155,8 +155,77 @@ class TestClaudeParser(unittest.TestCase):
             self.assertIn("250", output) # Cache Read
             self.assertIn("120", output) # Cache Create
 
-    def test_failed_reparse_clears_previous_state(self):
-        """A failed parse must not leave results from an earlier successful parse."""
+    def test_cache_read_and_creation_use_distinct_rates(self):
+        """Claude applies distinct rates to cache reads and cache creation."""
+        test_filename = self.test_dir / "mock_claude_pricing.jsonl"
+        model = "claude-sonnet-4-5-20250929"
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "sessionId": "pricing-session",
+            "requestId": "pricing-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": model,
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        run = parser.parse()[0]
+        pricing = PRICING[model]
+        expected_cost = (
+            100 * pricing["input"]
+            + 20 * pricing["output"]
+            + 40 * pricing["cache_read"]
+            + 10 * pricing["cache_write"]
+        )
+
+        self.assertEqual(run["total_tokens"], 170)
+        self.assertEqual(parser.total_cache_read, 40)
+        self.assertEqual(parser.total_cache_creation, 10)
+        self.assertAlmostEqual(run["cost"], expected_cost)
+        self.assertAlmostEqual(parser.total_cost, expected_cost)
+
+    def test_unknown_model_is_unpriced_and_reported(self):
+        """Claude retains unknown-model usage and reports its cost as incomplete."""
+        test_filename = self.test_dir / "mock_claude_unknown.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "requestId": "unknown-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-unknown",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        run = parser.parse()[0]
+
+        self.assertEqual(run["total_tokens"], 170)
+        self.assertIsNone(run["cost"])
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.unknown_models, {"claude-unknown"})
+
+        with patch("sys.stdout", new=StringIO()) as fake_out:
+            parser.summary()
+        output = fake_out.getvalue()
+        self.assertIn("UNPRICED", output)
+        self.assertIn("claude-unknown", output)
+        self.assertIn("incomplete", output)
+
+    def test_missing_path_clears_previous_results(self):
+        """Claude clears previous results when a later parse path is missing."""
         test_filename = self.test_dir / "mock_claude_state.jsonl"
         self._create_mock_log(test_filename, [{
             "type": "assistant",
