@@ -1,4 +1,5 @@
 import json
+from datetime import date as calendar_date
 from pathlib import Path
 from collections import defaultdict
 from .base import BaseParser
@@ -309,8 +310,22 @@ class CodexParser(BaseParser):
         # Additional metrics using the overall totals from parsing
         total_cached = self.total_cache_read
         cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
-        projected_monthly_cost = self.total_cost * 30
-
         print(f"[CODEX] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
-        print(f"[CODEX] Projected monthly cost:          ~${projected_monthly_cost:.2f}")
+
+        try:
+            dates = [
+                calendar_date.fromisoformat(run["timestamp"][:10])
+                for run in self.runs
+                if run.get("timestamp")
+            ]
+            observed_days = (max(dates) - min(dates)).days + 1
+            average_daily_cost = self.total_cost / observed_days
+            projected_30_day_cost = average_daily_cost * 30
+
+            print(f"[CODEX] Observed period:                 {observed_days} day(s)")
+            print(f"[CODEX] Average daily cost:              ${average_daily_cost:.2f}")
+            print(f"[CODEX] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
+        except (ValueError, TypeError):
+            print("[CODEX] Projected 30-day cost:           unavailable (invalid timestamps)")
+
         print(f"[CODEX] =========================")

@@ -1,4 +1,5 @@
 ﻿import json
+from datetime import date as calendar_date
 from pathlib import Path
 from collections import defaultdict
 from .base import BaseParser
@@ -303,8 +304,22 @@ class ClaudeParser(BaseParser):
         # Total cached includes both read and write/creation for Claude
         total_cached = self.total_cache_read + self.total_cache_creation
         cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
-        projected_monthly_cost = self.total_cost * 30
-
         print(f"[CLAUDE] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
-        print(f"[CLAUDE] Projected monthly cost:          ~${projected_monthly_cost:.2f}")
+
+        try:
+            dates = [
+                calendar_date.fromisoformat(run["timestamp"][:10])
+                for run in self.runs
+                if run.get("timestamp")
+            ]
+            observed_days = (max(dates) - min(dates)).days + 1
+            average_daily_cost = self.total_cost / observed_days
+            projected_30_day_cost = average_daily_cost * 30
+
+            print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
+            print(f"[CLAUDE] Average daily cost:              ${average_daily_cost:.2f}")
+            print(f"[CLAUDE] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
+        except (ValueError, TypeError):
+            print("[CLAUDE] Projected 30-day cost:           unavailable (invalid timestamps)")
+
         print(f"[CLAUDE] =========================")
