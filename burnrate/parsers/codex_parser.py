@@ -111,11 +111,6 @@ class CodexParser(BaseParser):
 
     def parse(self) -> list[dict]:
         """Parse Codex logs into individual usage entries and aggregate totals."""
-        if not self.log_dir.exists():
-            print(f"[CODEX] Error: Directory {self.log_dir} not found.")
-            return []
-
-
         self.runs = []
         self.total_tokens = 0
         self.total_cost = 0.0
@@ -126,6 +121,10 @@ class CodexParser(BaseParser):
         self.total_cache_read_cost = 0.0
         self.stats_by_folder.clear()
         self.unknown_models.clear()
+
+        if not self.log_dir.exists():
+            print(f"[CODEX] Error: Directory {self.log_dir} not found.")
+            return []
 
         if self.log_dir.is_file():
             files = [self.log_dir]

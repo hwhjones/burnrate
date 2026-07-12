@@ -155,5 +155,37 @@ class TestClaudeParser(unittest.TestCase):
             self.assertIn("250", output) # Cache Read
             self.assertIn("120", output) # Cache Create
 
+    def test_failed_reparse_clears_previous_state(self):
+        """A failed parse must not leave results from an earlier successful parse."""
+        test_filename = self.test_dir / "mock_claude_state.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "sessionId": "state-session",
+            "requestId": "state-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                },
+            },
+        }])
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        self.assertEqual(len(parser.parse()), 1)
+        self.assertGreater(parser.total_tokens, 0)
+
+        parser.log_dir = self.test_dir / "missing.jsonl"
+        with patch("sys.stdout", new=StringIO()):
+            self.assertEqual(parser.parse(), [])
+
+        self.assertEqual(parser.runs, [])
+        self.assertEqual(parser.total_tokens, 0)
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.models_used, set())
+        self.assertEqual(parser.sessions, set())
+        self.assertEqual(parser.unknown_models, set())
+
 if __name__ == "__main__":
     unittest.main()

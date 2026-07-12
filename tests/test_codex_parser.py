@@ -91,6 +91,40 @@ class TestCodexParser(unittest.TestCase):
             self.assertIn(f"{expected_total_output:,}", output)
             self.assertIn(f"{expected_total_cost:.2f}", output)
 
+    def test_failed_reparse_clears_previous_state(self):
+        """A failed parse must not leave results from an earlier successful parse."""
+        test_filename = self.test_dir / "mock_codex_state.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "event_msg",
+            "session_id": "state-session",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "model": "gpt-5.5",
+                    "last_token_usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 20,
+                    },
+                },
+            },
+        }])
+
+        parser = CodexParser(log_path=str(test_filename))
+        self.assertEqual(len(parser.parse()), 1)
+        self.assertGreater(parser.total_tokens, 0)
+
+        parser.log_dir = self.test_dir / "missing.jsonl"
+        with patch("sys.stdout", new=StringIO()):
+            self.assertEqual(parser.parse(), [])
+
+        self.assertEqual(parser.runs, [])
+        self.assertEqual(parser.total_tokens, 0)
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.models_used, set())
+        self.assertEqual(parser.sessions, set())
+        self.assertEqual(parser.unknown_models, set())
+
 
 if __name__ == "__main__":
     unittest.main()

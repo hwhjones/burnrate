@@ -105,19 +105,6 @@ class ClaudeParser(BaseParser):
 
     def parse(self) -> list[dict]:
         """Parse Claude logs and produce a list of individual usage runs."""
-        if not self.log_dir.exists():
-            print(f"[CLAUDE] Error: Path {self.log_dir} not found.")
-            return []
-
-        if self.log_dir.is_file():
-            files = [self.log_dir]
-        elif self.log_dir.is_dir():
-            files = sorted(self.log_dir.glob("**/*.jsonl"))
-        else:
-            print(f"[CLAUDE] Error: {self.log_dir} is not a file or directory.")
-            return []
-
-        # Reset parser state before processing the logs.
         self.runs = []
         self.total_tokens = 0
         self.total_cost = 0.0
@@ -130,6 +117,18 @@ class ClaudeParser(BaseParser):
         self.total_cache_creation_cost = 0.0
         self.stats_by_folder.clear()
         self.unknown_models.clear()
+
+        if not self.log_dir.exists():
+            print(f"[CLAUDE] Error: Path {self.log_dir} not found.")
+            return []
+
+        if self.log_dir.is_file():
+            files = [self.log_dir]
+        elif self.log_dir.is_dir():
+            files = sorted(self.log_dir.glob("**/*.jsonl"))
+        else:
+            print(f"[CLAUDE] Error: {self.log_dir} is not a file or directory.")
+            return []
         
         request_final_usages = {}
 
