@@ -37,13 +37,6 @@ PRICING = {
         "cache_write": 0.000001
     },
 }
-DEFAULT_PRICING = {
-    "input": 0.000003,
-    "output": 0.000015,
-    "cache_read": 0.0000003,
-    "cache_write": 0.00000375
-}
-
 class ClaudeParser(BaseParser):
     """Parser implementation for Anthropic Claude JSONL session logs."""
 
@@ -61,6 +54,7 @@ class ClaudeParser(BaseParser):
         self.total_cache_read_cost = 0.0
         self.total_cache_creation_cost = 0.0
         self.stats_by_folder = {}
+        self.unknown_models = set()
 
     def _extract_session_id(self, file_path: Path) -> str:
         """Construct a session identifier from a log file name."""
@@ -85,7 +79,9 @@ class ClaudeParser(BaseParser):
         Returns:
             float: The calculated cost.
         """
-        p = PRICING.get(model, DEFAULT_PRICING)
+        p = PRICING.get(model)
+        if p is None:
+            return None
         return (
             input_tokens * p["input"] +
             output_tokens * p["output"] +
@@ -133,6 +129,7 @@ class ClaudeParser(BaseParser):
         self.total_cache_read_cost = 0.0
         self.total_cache_creation_cost = 0.0
         self.stats_by_folder.clear()
+        self.unknown_models.clear()
         
         request_final_usages = {}
 
@@ -142,7 +139,10 @@ class ClaudeParser(BaseParser):
         for rid, entry in request_final_usages.items():
             self.runs.append(entry)
             self.total_tokens += entry["total_tokens"]
-            self.total_cost += entry["cost"]
+            if entry["cost"] is not None:
+                self.total_cost += entry["cost"]
+            else:
+                self.unknown_models.add(entry["model"])
             
             # Aggregate cache read tokens and their costs.
             if entry["cache_read_tokens"] > 0:
@@ -163,7 +163,7 @@ class ClaudeParser(BaseParser):
                  self.stats_by_folder[folder] = {"runs": 0, "tokens": 0, "cost": 0.0}
             self.stats_by_folder[folder]["runs"] += 1
             self.stats_by_folder[folder]["tokens"] += entry["total_tokens"]
-            self.stats_by_folder[folder]["cost"] += entry["cost"]
+            self.stats_by_folder[folder]["cost"] += entry["cost"] or 0.0
         return self.runs
 
     def _parse_file(self, file_path: Path, request_final_usages: dict) -> None:
@@ -215,7 +215,7 @@ class ClaudeParser(BaseParser):
 
                 model = self._extract_model(data)
                 cost = self._calculate_cost(input_tokens, output_tokens, cache_read, cache_create, model)
-                p = PRICING.get(model, DEFAULT_PRICING)
+                p = PRICING.get(model)
                 
                 sid = data.get("sessionId") or data.get("session_id") or session_id
                 if sid:
@@ -229,8 +229,14 @@ class ClaudeParser(BaseParser):
                     "cache_creation_tokens": cache_create,
                     "model": model,
                     "cost": cost,
-                    "c_read_cost": cache_read * p.get("cache_read", p["input"] * 0.1),
-                    "c_create_cost": cache_create * p.get("cache_write", p["input"] * 1.25),
+                    "c_read_cost": (
+                        cache_read * p.get("cache_read", p["input"] * 0.1)
+                        if p is not None else 0.0
+                    ),
+                    "c_create_cost": (
+                        cache_create * p.get("cache_write", p["input"] * 1.25)
+                        if p is not None else 0.0
+                    ),
                     "filepath": str(file_path),
                 }
 
@@ -252,7 +258,8 @@ class ClaudeParser(BaseParser):
             "output": 0,
             "cache_read": 0,
             "cache_creation": 0, # Add cache creation to grouped stats
-            "cost": 0.0
+            "cost": 0.0,
+            "priced": True,
         }))
 
         for run in self.runs:
@@ -265,7 +272,10 @@ class ClaudeParser(BaseParser):
             # grouped_stats[date][model]["reasoning"] += run.get("reasoning_tokens", 0)
             grouped_stats[date][model]["cache_read"] += run.get("cache_read_tokens", 0)
             grouped_stats[date][model]["cache_creation"] += run.get("cache_creation_tokens", 0) # Aggregate cache creation
-            grouped_stats[date][model]["cost"] += run.get("cost", 0.0)
+            if run.get("cost") is None:
+                grouped_stats[date][model]["priced"] = False
+            else:
+                grouped_stats[date][model]["cost"] += run["cost"]
 
         # Print table header
         print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Cache Create':>12} {'Cache Read':>10} {'Cost':>8}")
@@ -286,6 +296,7 @@ class ClaudeParser(BaseParser):
                 cache_r = stats["cache_read"]
                 cache_c = stats["cache_creation"] # Get cache creation for current row
                 cost_v = stats["cost"]
+                cost_display = f"{cost_v:>8.2f}" if stats["priced"] else f"{'UNPRICED':>8}"
 
                 total_input_agg += input_t
                 total_output_agg += output_t
@@ -293,7 +304,7 @@ class ClaudeParser(BaseParser):
                 total_cache_creation_agg += cache_c # Aggregate cache creation
                 total_cost_agg += cost_v
 
-                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {cache_c:>12,} {cache_r:>10,} {cost_v:>8.2f}")
+                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {cache_c:>12,} {cache_r:>10,} {cost_display}")
 
         # Print totals row
         print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*8}")
@@ -306,20 +317,25 @@ class ClaudeParser(BaseParser):
         cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
         print(f"[CLAUDE] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
 
-        try:
-            dates = [
-                calendar_date.fromisoformat(run["timestamp"][:10])
-                for run in self.runs
-                if run.get("timestamp")
-            ]
-            observed_days = (max(dates) - min(dates)).days + 1
-            average_daily_cost = self.total_cost / observed_days
-            projected_30_day_cost = average_daily_cost * 30
+        if self.unknown_models:
+            models = ", ".join(sorted(self.unknown_models))
+            print(f"[CLAUDE] Unpriced models:                  {models}")
+            print("[CLAUDE] Cost totals and projection:       incomplete")
+        else:
+            try:
+                dates = [
+                    calendar_date.fromisoformat(run["timestamp"][:10])
+                    for run in self.runs
+                    if run.get("timestamp")
+                ]
+                observed_days = (max(dates) - min(dates)).days + 1
+                average_daily_cost = self.total_cost / observed_days
+                projected_30_day_cost = average_daily_cost * 30
 
-            print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
-            print(f"[CLAUDE] Average daily cost:              ${average_daily_cost:.2f}")
-            print(f"[CLAUDE] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
-        except (ValueError, TypeError):
-            print("[CLAUDE] Projected 30-day cost:           unavailable (invalid timestamps)")
+                print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
+                print(f"[CLAUDE] Average daily cost:              ${average_daily_cost:.2f}")
+                print(f"[CLAUDE] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
+            except (ValueError, TypeError):
+                print("[CLAUDE] Projected 30-day cost:           unavailable (invalid timestamps)")
 
         print(f"[CLAUDE] =========================")

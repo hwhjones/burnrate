@@ -78,6 +78,7 @@ class CodexParser(BaseParser):
         self.total_reasoning_tokens = 0
         self.total_cache_read_cost = 0.0
         self.stats_by_folder = {}
+        self.unknown_models = set()
 
     def _extract_session_id(self, file_path: Path) -> str:
         stem = file_path.stem
@@ -99,7 +100,9 @@ class CodexParser(BaseParser):
         Returns:
             float: The calculated cost.
         """
-        p = PRICING.get(model, PRICING["gpt-4o-mini"])
+        p = PRICING.get(model)
+        if p is None:
+            return None
         return (
             input_tokens * p["input"] +
             output_tokens * p["output"] +
@@ -122,6 +125,7 @@ class CodexParser(BaseParser):
         self.total_reasoning_tokens = 0
         self.total_cache_read_cost = 0.0
         self.stats_by_folder.clear()
+        self.unknown_models.clear()
 
         if self.log_dir.is_file():
             files = [self.log_dir]
@@ -142,7 +146,10 @@ class CodexParser(BaseParser):
         for entry in request_final_usages.values():
             self.runs.append(entry)
             self.total_tokens += entry["total_tokens"]
-            self.total_cost += entry["cost"]
+            if entry["cost"] is not None:
+                self.total_cost += entry["cost"]
+            else:
+                self.unknown_models.add(entry["model"])
             self.models_used.add(entry["model"])
             
             # Aggregate cache read tokens and their costs.
@@ -159,7 +166,7 @@ class CodexParser(BaseParser):
             
             self.stats_by_folder[folder]["runs"] += 1
             self.stats_by_folder[folder]["tokens"] += entry["total_tokens"]
-            self.stats_by_folder[folder]["cost"] += entry["cost"]
+            self.stats_by_folder[folder]["cost"] += entry["cost"] or 0.0
 
         return self.runs
 
@@ -224,7 +231,7 @@ class CodexParser(BaseParser):
 
                     request_id = data.get("requestId") or f"{session_id}_{data.get('timestamp')}" # Synthetic request_id
                     cost = self._calculate_cost(input_tokens, output_tokens, cache_read, reasoning, model)
-                    p = PRICING.get(model, PRICING["gpt-4o-mini"])
+                    p = PRICING.get(model)
 
                     # Store the latest entry for this requestId (cumulative usage)
                     request_final_usages[request_id] = {
@@ -236,7 +243,10 @@ class CodexParser(BaseParser):
                         "total_tokens": total_tokens,
                         "cache_read_tokens": cache_read,
                         "cost": cost,
-                        "c_read_cost": cache_read * p.get("cache_read", p["input"] * 0.1),
+                        "c_read_cost": (
+                            cache_read * p.get("cache_read", p["input"] * 0.1)
+                            if p is not None else 0.0
+                        ),
                         "filepath": str(file_path),
                     }
                 except json.JSONDecodeError:
@@ -260,7 +270,8 @@ class CodexParser(BaseParser):
             "output": 0,
             "reasoning": 0,
             "cache_read": 0,
-            "cost": 0.0
+            "cost": 0.0,
+            "priced": True,
         }))
 
         for run in self.runs:
@@ -271,7 +282,10 @@ class CodexParser(BaseParser):
             grouped_stats[date][model]["output"] += run.get("output_tokens", 0)
             grouped_stats[date][model]["reasoning"] += run.get("reasoning_tokens", 0)
             grouped_stats[date][model]["cache_read"] += run.get("cache_read_tokens", 0)
-            grouped_stats[date][model]["cost"] += run.get("cost", 0.0)
+            if run.get("cost") is None:
+                grouped_stats[date][model]["priced"] = False
+            else:
+                grouped_stats[date][model]["cost"] += run["cost"]
 
         # Print table header
         print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Reasoning':>9} {'Cache Read':>10} {'Cost':>8}")
@@ -292,6 +306,7 @@ class CodexParser(BaseParser):
                 reasoning_t = stats["reasoning"]
                 cache_r = stats["cache_read"]
                 cost_v = stats["cost"]
+                cost_display = f"{cost_v:>8.2f}" if stats["priced"] else f"{'UNPRICED':>8}"
 
                 total_input_agg += input_t
                 total_output_agg += output_t
@@ -299,7 +314,7 @@ class CodexParser(BaseParser):
                 total_cache_read_agg += cache_r
                 total_cost_agg += cost_v
 
-                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {reasoning_t:>9,} {cache_r:>10,} {cost_v:>8.2f}")
+                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {reasoning_t:>9,} {cache_r:>10,} {cost_display}")
 
         # Print totals row
         print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*8}")
@@ -311,20 +326,25 @@ class CodexParser(BaseParser):
         cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
         print(f"[CODEX] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
 
-        try:
-            dates = [
-                calendar_date.fromisoformat(run["timestamp"][:10])
-                for run in self.runs
-                if run.get("timestamp")
-            ]
-            observed_days = (max(dates) - min(dates)).days + 1
-            average_daily_cost = self.total_cost / observed_days
-            projected_30_day_cost = average_daily_cost * 30
+        if self.unknown_models:
+            models = ", ".join(sorted(self.unknown_models))
+            print(f"[CODEX] Unpriced models:                  {models}")
+            print("[CODEX] Cost totals and projection:       incomplete")
+        else:
+            try:
+                dates = [
+                    calendar_date.fromisoformat(run["timestamp"][:10])
+                    for run in self.runs
+                    if run.get("timestamp")
+                ]
+                observed_days = (max(dates) - min(dates)).days + 1
+                average_daily_cost = self.total_cost / observed_days
+                projected_30_day_cost = average_daily_cost * 30
 
-            print(f"[CODEX] Observed period:                 {observed_days} day(s)")
-            print(f"[CODEX] Average daily cost:              ${average_daily_cost:.2f}")
-            print(f"[CODEX] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
-        except (ValueError, TypeError):
-            print("[CODEX] Projected 30-day cost:           unavailable (invalid timestamps)")
+                print(f"[CODEX] Observed period:                 {observed_days} day(s)")
+                print(f"[CODEX] Average daily cost:              ${average_daily_cost:.2f}")
+                print(f"[CODEX] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
+            except (ValueError, TypeError):
+                print("[CODEX] Projected 30-day cost:           unavailable (invalid timestamps)")
 
         print(f"[CODEX] =========================")
