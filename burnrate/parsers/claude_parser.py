@@ -3,40 +3,10 @@ from datetime import date as calendar_date
 from pathlib import Path
 from collections import defaultdict
 from .base import BaseParser
+from ..pricing import CLAUDE_PRICING, calculate_cost
 
-# Pricing rates per token for supported Claude model variants.
-PRICING = {
-    "claude-opus-4-20250514": {
-        "input": 0.000015,
-        "output": 0.000075,
-        "cache_read": 0.0000015,
-        "cache_write": 0.00001875
-    },
-    "claude-opus-4-6": {
-        "input": 0.000015,
-        "output": 0.000075,
-        "cache_read": 0.0000015,
-        "cache_write": 0.00001875
-    },
-    "claude-sonnet-4-20250514": {
-        "input": 0.000003,
-        "output": 0.000015,
-        "cache_read": 0.0000003,
-        "cache_write": 0.00000375
-    },
-    "claude-sonnet-4-5-20250929": {
-        "input": 0.000003,
-        "output": 0.000015,
-        "cache_read": 0.0000003,
-        "cache_write": 0.00000375
-    },
-    "claude-haiku-4-5-20251001": {
-        "input": 0.0000008,
-        "output": 0.000004,
-        "cache_read": 0.00000008,
-        "cache_write": 0.000001
-    },
-}
+# Backward-compatible alias for existing imports.
+PRICING = CLAUDE_PRICING
 class ClaudeParser(BaseParser):
     """Parser implementation for Anthropic Claude JSONL session logs."""
 
@@ -64,34 +34,6 @@ class ClaudeParser(BaseParser):
             # Use the trailing five components when the filename is long.
             return "-".join(parts[-5:])
         return stem
-
-    def _calculate_cost(self, input_tokens, output_tokens,
-                        cache_read, cache_creation, model):
-        """Calculates the cost for a given set of tokens and model.
-
-        Args:
-            input_tokens (int): Number of input tokens (new, non-cached).
-            output_tokens (int): Number of output tokens.
-            cache_read (int): Number of cache read tokens.
-            cache_creation (int): Number of cache creation tokens.
-            model (str): The model name used for pricing.
-
-        Returns:
-            float: The calculated cost.
-        """
-        p = PRICING.get(model)
-        if p is None:
-            return None
-        return (
-            input_tokens * p["input"] +
-            output_tokens * p["output"] +
-            cache_read * p.get(
-                "cache_read", p["input"] * 0.1
-            ) +
-            cache_creation * p.get(
-                "cache_write", p["input"] * 1.25
-            )
-        )
 
     def _extract_model(self, data: dict) -> str:
         """Extract the used model name from a log record."""
@@ -216,8 +158,14 @@ class ClaudeParser(BaseParser):
                     continue
 
                 model = self._extract_model(data)
-                cost = self._calculate_cost(input_tokens, output_tokens, cache_read, cache_create, model)
-                p = PRICING.get(model)
+                costs = calculate_cost(
+                    PRICING,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    cache_read_tokens=cache_read,
+                    cache_write_tokens=cache_create,
+                )
                 
                 sid = data.get("sessionId") or data.get("session_id") or session_id
                 if sid:
@@ -230,15 +178,9 @@ class ClaudeParser(BaseParser):
                     "cache_read_tokens": cache_read,
                     "cache_creation_tokens": cache_create,
                     "model": model,
-                    "cost": cost,
-                    "c_read_cost": (
-                        cache_read * p.get("cache_read", p["input"] * 0.1)
-                        if p is not None else 0.0
-                    ),
-                    "c_create_cost": (
-                        cache_create * p.get("cache_write", p["input"] * 1.25)
-                        if p is not None else 0.0
-                    ),
+                    "cost": costs["total"] if costs else None,
+                    "c_read_cost": costs["cache_read"] if costs else 0.0,
+                    "c_create_cost": costs["cache_write"] if costs else 0.0,
                     "filepath": str(file_path),
                 }
 

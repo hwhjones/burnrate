@@ -3,66 +3,10 @@ from datetime import date as calendar_date
 from pathlib import Path
 from collections import defaultdict
 from .base import BaseParser
+from ..pricing import CODEX_PRICING, calculate_cost
 
-# Pricing rates used when no explicit model mapping exists in Codex logs.
-PRICING = {
-    "gpt-5.5": {
-        "input": 0.000005,
-        "output": 0.000030,
-        "cache_read": 0.0000005,
-        "cache_write": 0.000006250
-        # Note: Codex logs do not currently expose 'cache_write' tokens directly in usage.
-    },
-    "gpt-5.5-pro": {
-        "input": 0.000030,
-        "output": 0.000180,
-        "cache_read": 0.000003,
-        "cache_write": 0.0000375
-    },
-    # ... (other pricing entries remain unchanged)
-    "gpt-5.4": {
-        "input": 0.0000025,
-        "output": 0.000015,
-        "cache_read": 0.00000025,
-        "cache_write": 0.000003125
-    },
-    "gpt-5.4-mini": {
-        "input": 0.0000005,
-        "output": 0.000002,
-        "cache_read": 0.00000005,
-        "cache_write": 0.000000625
-    },
-    "gpt-5.4-nano": {
-        "input": 0.0000001,
-        "output": 0.0000004,
-        "cache_read": 0.00000001,
-        "cache_write": 0.000000125
-    },
-    "gpt-4o": {
-        "input": 0.0000025,
-        "output": 0.00001,
-        "cache_read": 0.00000025,
-        "cache_write": 0.000003125
-    },
-    "gpt-4o-mini": {
-        "input": 0.00000015,
-        "output": 0.0000006,
-        "cache_read": 0.000000015,
-        "cache_write": 0.0000001875
-    },
-    "o3": {
-        "input": 0.00001,
-        "output": 0.00004,
-        "cache_read": 0.000001,
-        "cache_write": 0.0000125
-    },
-    "o4-mini": {
-        "input": 0.000003,
-        "output": 0.000012,
-        "cache_read": 0.0000003,
-        "cache_write": 0.00000375
-    },
-}
+# Backward-compatible alias for existing imports.
+PRICING = CODEX_PRICING
 
 class CodexParser(BaseParser):
     """Parser implementation for Codex-style JSONL session logs."""
@@ -86,28 +30,6 @@ class CodexParser(BaseParser):
         if len(parts) >= 5:
             return "-".join(parts[-5:])
         return stem
-
-    def _calculate_cost(self, input_tokens, output_tokens, cache_read, reasoning, model):
-        """Calculates the cost for a given set of tokens and model.
-
-        Args:
-            input_tokens (int): Number of input tokens.
-            output_tokens (int): Number of output tokens.
-            cache_read (int): Number of cache read tokens.
-            reasoning (int): Number of reasoning tokens included in output_tokens.
-            model (str): The model name used for pricing.
-
-        Returns:
-            float: The calculated cost.
-        """
-        p = PRICING.get(model)
-        if p is None:
-            return None
-        return (
-            input_tokens * p["input"] +
-            output_tokens * p["output"] +
-            cache_read * p.get("cache_read", p["input"] * 0.1)
-        )
 
     def parse(self) -> list[dict]:
         """Parse Codex logs into individual usage entries and aggregate totals."""
@@ -231,8 +153,13 @@ class CodexParser(BaseParser):
                     total_tokens = input_tokens + output_tokens + cache_read
 
                     request_id = data.get("requestId") or f"{session_id}_{data.get('timestamp')}" # Synthetic request_id
-                    cost = self._calculate_cost(input_tokens, output_tokens, cache_read, reasoning, model)
-                    p = PRICING.get(model)
+                    costs = calculate_cost(
+                        PRICING,
+                        model,
+                        input_tokens,
+                        output_tokens,
+                        cache_read_tokens=cache_read,
+                    )
 
                     # Store the latest entry for this requestId (cumulative usage)
                     request_final_usages[request_id] = {
@@ -243,11 +170,8 @@ class CodexParser(BaseParser):
                         "reasoning_tokens": reasoning,
                         "total_tokens": total_tokens,
                         "cache_read_tokens": cache_read,
-                        "cost": cost,
-                        "c_read_cost": (
-                            cache_read * p.get("cache_read", p["input"] * 0.1)
-                            if p is not None else 0.0
-                        ),
+                        "cost": costs["total"] if costs else None,
+                        "c_read_cost": costs["cache_read"] if costs else 0.0,
                         "filepath": str(file_path),
                     }
                 except json.JSONDecodeError:

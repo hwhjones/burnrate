@@ -110,6 +110,7 @@ burnrate/
 |-- burnrate/
 |   |-- __main__.py
 |   |-- main.py
+|   |-- pricing.py
 |   `-- parsers/
 |       |-- base.py
 |       |-- codex_parser.py
