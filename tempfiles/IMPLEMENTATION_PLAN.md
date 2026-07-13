@@ -5,14 +5,14 @@ mergeable pull request. Dependencies indicate merge order; PRs without a
 dependency can be developed independently. Every PR must pass the complete
 existing test suite plus its focused tests.
 
-## High priority
+## High priority v0.1.1
 
 ### H1 - Treat missing Codex model metadata as unpriced
 
-- [ ] Replace the `gpt-4o-mini` parser fallback with `UNKNOWN_MODEL`.
-- [ ] Preserve token usage while setting the record cost to `None`.
-- [ ] Report missing-model usage alongside other unpriced models.
-- [ ] Test missing model metadata, absent `turn_context`, and a model supplied
+- [x] Replace the `gpt-4o-mini` parser fallback with `UNKNOWN_MODEL`.
+- [x] Preserve token usage while setting the record cost to `None`.
+- [x] Report missing-model usage alongside other unpriced models.
+- [x] Test missing model metadata, absent `turn_context`, and a model supplied
   by `turn_context`.
 
 Dependencies: none.
@@ -102,7 +102,7 @@ Dependencies: H6.
 
 Dependencies: H6.
 
-## Medium priority
+## Medium priority v0.1.1
 
 ### M1 - Accept UTF-8 BOM files
 
@@ -153,7 +153,7 @@ Dependencies: M3.
 
 Dependencies: H4, H5, H6, M2, and M3.
 
-## Low priority / structural improvements
+## Low priority / structural improvements v0.1.x
 
 ### L1 - Introduce typed usage records
 

@@ -164,6 +164,101 @@ class TestCodexParser(unittest.TestCase):
         self.assertIn("gpt-unknown", output)
         self.assertIn("incomplete", output)
 
+    def test_missing_model_without_turn_context_is_unpriced(self):
+        """Codex does not guess a priced model when all model metadata is absent."""
+        test_filename = self.test_dir / "mock_codex_missing_model.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "event_msg",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 20,
+                    },
+                },
+            },
+        }])
+
+        parser = CodexParser(log_path=str(test_filename))
+        run = parser.parse()[0]
+
+        self.assertEqual(run["model"], "UNKNOWN_MODEL")
+        self.assertEqual(run["total_tokens"], 120)
+        self.assertIsNone(run["cost"])
+        self.assertEqual(parser.total_cost, 0.0)
+        self.assertEqual(parser.unknown_models, {"UNKNOWN_MODEL"})
+
+        with patch("sys.stdout", new=StringIO()) as fake_out:
+            parser.summary()
+        output = fake_out.getvalue()
+        self.assertIn("UNKNOWN_MODEL", output)
+        self.assertIn("UNPRICED", output)
+        self.assertIn("incomplete", output)
+
+    def test_turn_context_without_model_remains_unpriced(self):
+        """Codex ignores an empty turn context instead of selecting a priced fallback."""
+        test_filename = self.test_dir / "mock_codex_empty_context.jsonl"
+        self._create_mock_log(test_filename, [
+            {
+                "type": "turn_context",
+                "payload": {},
+            },
+            {
+                "type": "event_msg",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 20,
+                        },
+                    },
+                },
+            },
+        ])
+
+        parser = CodexParser(log_path=str(test_filename))
+        run = parser.parse()[0]
+
+        self.assertEqual(run["model"], "UNKNOWN_MODEL")
+        self.assertIsNone(run["cost"])
+        self.assertEqual(parser.unknown_models, {"UNKNOWN_MODEL"})
+
+    def test_turn_context_model_prices_usage_without_info_model(self):
+        """Codex uses explicit turn-context model metadata for following usage."""
+        test_filename = self.test_dir / "mock_codex_context_model.jsonl"
+        self._create_mock_log(test_filename, [
+            {
+                "type": "turn_context",
+                "payload": {"model": "gpt-5.5"},
+            },
+            {
+                "type": "event_msg",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 20,
+                        },
+                    },
+                },
+            },
+        ])
+
+        parser = CodexParser(log_path=str(test_filename))
+        run = parser.parse()[0]
+        pricing = PRICING["gpt-5.5"]
+        expected_cost = 100 * pricing["input"] + 20 * pricing["output"]
+
+        self.assertEqual(run["model"], "gpt-5.5")
+        self.assertAlmostEqual(run["cost"], expected_cost)
+        self.assertEqual(parser.unknown_models, set())
+
     def test_malformed_and_non_object_records_are_skipped(self):
         """Codex skips damaged or non-object JSON and continues to valid usage."""
         test_filename = self.test_dir / "mock_codex_malformed.jsonl"

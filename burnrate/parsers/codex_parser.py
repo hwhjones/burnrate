@@ -104,7 +104,7 @@ class CodexParser(BaseParser):
             return
 
         folder = file_path.parent.name
-        current_model = "gpt-4o-mini" # Initialize current_model for this file
+        current_model = "UNKNOWN_MODEL"
         session_id = self._extract_session_id(file_path)
 
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -118,7 +118,9 @@ class CodexParser(BaseParser):
                     msg_type = data.get("type")
 
                     if msg_type == "turn_context":
-                        current_model = data.get("payload", {}).get("model", current_model)
+                        context_model = data.get("payload", {}).get("model")
+                        if context_model:
+                            current_model = context_model
                         continue
 
                     # Guard clauses for early exit
@@ -139,7 +141,7 @@ class CodexParser(BaseParser):
                     if not usage:
                         continue
 
-                    model = info.get("model") or current_model # Use current_model as fallback
+                    model = info.get("model") or current_model
 
                     sid = data.get("session_id") or data.get("payload", {}).get("session_id") or session_id
                     if sid:
