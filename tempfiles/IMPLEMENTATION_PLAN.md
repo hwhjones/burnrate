@@ -134,32 +134,6 @@ Dependencies: H8.
 
 Dependencies: none.
 
-### M4 - Isolate parser tests
-
-- [ ] Replace fixed repository-root mock directories with
-  `TemporaryDirectory`.
-- [ ] Ensure cleanup occurs even when a test fails.
-- [ ] Preserve all existing behavioral coverage.
-
-Dependencies: none.
-
-### M5 - Add linting and formatting checks
-
-- [ ] Configure Ruff for Python 3.9.
-- [ ] Apply formatting as a dedicated mechanical change.
-- [ ] Document lint and formatting-check commands for contributors.
-
-Dependencies: M4.
-
-### M6 - Add continuous integration
-
-- [ ] Run unit tests on Python 3.9 and the latest stable Python available in
-  GitHub Actions.
-- [ ] Run Ruff checks and package-build smoke tests.
-- [ ] Cache only safe dependency and build artifacts.
-
-Dependencies: M3 and M5.
-
 ### M7 - Use one version source
 
 - [ ] Make `pyproject.toml` authoritative for the package version.
@@ -167,15 +141,6 @@ Dependencies: M3 and M5.
 - [ ] Provide a safe source-tree fallback when distribution metadata is
   unavailable.
 - [ ] Test installed and source-tree version access.
-
-Dependencies: M3.
-
-### M8 - Complete package metadata
-
-- [ ] Declare the MIT license, author, repository URL, issue tracker, and
-  relevant package classifiers.
-- [ ] Use the existing repository and license information.
-- [ ] Validate the metadata through the built wheel.
 
 Dependencies: M3.
 
@@ -241,6 +206,41 @@ Dependencies: M2.
   state.
 
 Dependencies: L1 and L3.
+
+### L6 - Isolate parser tests
+
+- [ ] Replace fixed repository-root mock directories with
+  `TemporaryDirectory`.
+- [ ] Ensure cleanup occurs even when a test fails.
+- [ ] Preserve all existing behavioral coverage.
+
+Dependencies: none.
+
+### L7 - Add linting and formatting checks
+
+- [ ] Configure Ruff for Python 3.9.
+- [ ] Apply formatting as a dedicated mechanical change.
+- [ ] Document lint and formatting-check commands for contributors.
+
+Dependencies: L6.
+
+### L8 - Add continuous integration
+
+- [ ] Run unit tests on Python 3.9 and the latest stable Python available in
+  GitHub Actions.
+- [ ] Run Ruff checks and package-build smoke tests.
+- [ ] Cache only safe dependency and build artifacts.
+
+Dependencies: M3 and L7.
+
+### L9 - Complete package metadata
+
+- [ ] Declare the MIT license, author, repository URL, issue tracker, and
+  relevant package classifiers.
+- [ ] Use the existing repository and license information.
+- [ ] Validate the metadata through the built wheel.
+
+Dependencies: M3.
 
 ## Deferred to the product roadmap
 
