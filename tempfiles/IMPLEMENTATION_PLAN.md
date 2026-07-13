@@ -17,43 +17,7 @@ existing test suite plus its focused tests.
 
 Dependencies: none.
 
-### H2 - Scope usage keys to sessions
-
-- [ ] Deduplicate cumulative usage using `(session_id, request_id)` instead of
-  request ID alone.
-- [ ] Resolve session IDs from record metadata and then the source filename.
-- [ ] Retain `session_id` and `request_id` in returned usage records.
-- [ ] Test repeated request IDs within one session and identical request IDs
-  across sessions and files.
-
-Dependencies: none.
-
-### H3 - Preserve records without request IDs or timestamps
-
-- [ ] When a request ID is absent, use the resolved filepath and source line
-  number as a unique identity.
-- [ ] Do not use the timestamp alone as a fallback identity.
-- [ ] Select duplicate cumulative records by parsed timestamp, using sorted
-  filepath and line number as deterministic tie-breakers.
-- [ ] Test missing request IDs, missing timestamps, repeated timestamps, and
-  multiple identity-deficient records.
-
-Dependencies: H2.
-
-### H4 - Correct projections containing undated records
-
-- [ ] Parse dates defensively and classify missing or invalid timestamps as
-  undated.
-- [ ] Include undated records in usage totals and known-cost totals.
-- [ ] Exclude undated cost from the dated 30-day projection and report the
-  number and known cost of excluded records.
-- [ ] Mark the projection unavailable when no valid dated records exist.
-- [ ] Test all-dated, mixed, all-undated, invalid-timestamp, and single-day
-  scans.
-
-Dependencies: none.
-
-### H5A - Audit and correct API rates
+### H2A - Audit and correct API rates
 
 - [ ] Verify every bundled model and token-category rate against an
   authoritative provider source.
@@ -69,7 +33,7 @@ Dependencies: none.
 
 Dependencies: H1.
 
-### H5B - Add pricing provenance and API-equivalent labels
+### H2B - Add pricing provenance and API-equivalent labels
 
 - [ ] Add plain-dictionary metadata for source URL, USD currency, source and
   stored units, verification date, and effective-date status.
@@ -80,9 +44,9 @@ Dependencies: H1.
   BurnRate does not yet calculate Codex credit use.
 - [ ] Test metadata completeness and formatting for every priced model.
 
-Dependencies: H5A.
+Dependencies: H2A.
 
-### H5C - Estimate Codex credit-equivalent usage
+### H2C - Estimate Codex credit-equivalent usage
 
 - [ ] Add a separate `CODEX_CREDIT_PRICING` rate card; never mix credit rates
   with API-equivalent USD rates.
@@ -98,7 +62,43 @@ Dependencies: H5A.
   metadata could make actual credit consumption differ from the estimate.
 - [ ] Test every supported model, token category, and incomplete-estimate path.
 
-Dependencies: H5B.
+Dependencies: H2B.
+
+### H3 - Scope usage keys to sessions
+
+- [ ] Deduplicate cumulative usage using `(session_id, request_id)` instead of
+  request ID alone.
+- [ ] Resolve session IDs from record metadata and then the source filename.
+- [ ] Retain `session_id` and `request_id` in returned usage records.
+- [ ] Test repeated request IDs within one session and identical request IDs
+  across sessions and files.
+
+Dependencies: none.
+
+### H4 - Preserve records without request IDs or timestamps
+
+- [ ] When a request ID is absent, use the resolved filepath and source line
+  number as a unique identity.
+- [ ] Do not use the timestamp alone as a fallback identity.
+- [ ] Select duplicate cumulative records by parsed timestamp, using sorted
+  filepath and line number as deterministic tie-breakers.
+- [ ] Test missing request IDs, missing timestamps, repeated timestamps, and
+  multiple identity-deficient records.
+
+Dependencies: H3.
+
+### H5 - Correct projections containing undated records
+
+- [ ] Parse dates defensively and classify missing or invalid timestamps as
+  undated.
+- [ ] Include undated records in usage totals and known-cost totals.
+- [ ] Exclude undated cost from the dated 30-day projection and report the
+  number and known cost of excluded records.
+- [ ] Mark the projection unavailable when no valid dated records exist.
+- [ ] Test all-dated, mixed, all-undated, invalid-timestamp, and single-day
+  scans.
+
+Dependencies: none.
 
 ### H6 - Report skipped and malformed records
 
@@ -184,7 +184,7 @@ Dependencies: M3.
   projection exclusions, and CLI exit statuses.
 - [ ] Verify every documented command against an installed package.
 
-Dependencies: H4, H5C, H6, M2, and M3.
+Dependencies: H2C, H5, H6, M2, and M3.
 
 ## Low priority / structural improvements v0.1.x
 
@@ -288,7 +288,7 @@ Dependencies: M3.
 - [ ] Keep pricing data, provenance, and effective-date information together
   so they cannot drift independently.
 
-Dependencies: H5B.
+Dependencies: H2B.
 
 ## Deferred to the product roadmap
 
