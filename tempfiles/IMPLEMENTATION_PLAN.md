@@ -53,19 +53,52 @@ Dependencies: H2.
 
 Dependencies: none.
 
-### H5 - Verify and document API pricing
+### H5A - Audit and correct API rates
 
-- [ ] Verify every bundled rate against an authoritative provider source.
-- [ ] Record the source URL, USD currency, rate unit, verification date, and
-  effective date for every model rate.
-- [ ] Label calculated cost as API-equivalent USD in documentation and output.
-- [ ] State explicitly that BurnRate does not yet calculate Codex credit use.
-- [ ] Preserve the existing `CODEX_PRICING`, `CLAUDE_PRICING`, and
-  `calculate_cost()` imports.
-- [ ] Test pricing metadata completeness, supported token categories, and
-  unknown-model behavior.
+- [ ] Verify every bundled model and token-category rate against an
+  authoritative provider source.
+- [ ] Correct stale rates and remove models or categories that cannot be
+  verified confidently.
+- [ ] Keep the current provider dictionaries and `calculate_cost()` interface
+  for this PR so rate corrections remain isolated from structural changes.
+- [ ] Remove inferred cache-rate multipliers; every priced token category must
+  have an explicit verified rate.
+- [ ] Retain unknown or unverifiable models as unpriced instead of guessing.
+- [ ] Add exact calculation fixtures for every supported model and token
+  category, including cache reads and cache writes.
 
 Dependencies: H1.
+
+### H5B - Add pricing provenance and API-equivalent labels
+
+- [ ] Add plain-dictionary metadata for source URL, USD currency, source and
+  stored units, verification date, and effective-date status.
+- [ ] Record an explicit unknown status when an authoritative source does not
+  publish an effective date; do not invent one.
+- [ ] Label calculated cost as API-equivalent USD in documentation and output.
+- [ ] State explicitly that estimates are not provider invoices and that
+  BurnRate does not yet calculate Codex credit use.
+- [ ] Test metadata completeness and formatting for every priced model.
+
+Dependencies: H5A.
+
+### H5C - Estimate Codex credit-equivalent usage
+
+- [ ] Add a separate `CODEX_CREDIT_PRICING` rate card; never mix credit rates
+  with API-equivalent USD rates.
+- [ ] Calculate estimated credits independently from input, cached-input, and
+  output token counts.
+- [ ] Record the authoritative source URL, credit unit, verification date, and
+  effective date for every supported model rate.
+- [ ] Report API-equivalent USD and Codex credit-equivalent usage in separate
+  columns and totals.
+- [ ] Mark credit estimates unavailable for unsupported models or when the
+  applicable rate-card conditions cannot be established.
+- [ ] Warn when fast mode, legacy Enterprise pricing, or other missing log
+  metadata could make actual credit consumption differ from the estimate.
+- [ ] Test every supported model, token category, and incomplete-estimate path.
+
+Dependencies: H5B.
 
 ### H6 - Report skipped and malformed records
 
@@ -151,7 +184,7 @@ Dependencies: M3.
   projection exclusions, and CLI exit statuses.
 - [ ] Verify every documented command against an installed package.
 
-Dependencies: H4, H5, H6, M2, and M3.
+Dependencies: H4, H5C, H6, M2, and M3.
 
 ## Low priority / structural improvements v0.1.x
 
@@ -242,10 +275,24 @@ Dependencies: M3 and L7.
 
 Dependencies: M3.
 
+### L10 - Unify the API pricing structure
+
+- [ ] Replace the provider-specific pricing dictionaries with one plain nested
+  `API_PRICING` mapping; do not introduce pricing dataclasses.
+- [ ] Store source-facing rates per million tokens so values can be compared
+  directly with provider rate cards.
+- [ ] Rename `calculate_cost()` to `calculate_api_cost()` and update both
+  parsers and all tests.
+- [ ] Remove the obsolete `CODEX_PRICING`, `CLAUDE_PRICING`, and parser-level
+  `PRICING` aliases.
+- [ ] Keep pricing data, provenance, and effective-date information together
+  so they cannot drift independently.
+
+Dependencies: H5B.
+
 ## Deferred to the product roadmap
 
 - Context growth, cache share, replay ratio, and personal session baselines.
-- Codex credit-equivalent estimates.
 - Historical and versioned rate-card resolution and pricing update commands.
 - Recommendations, budgets, exports, dashboards, and content-aware analysis.
 
