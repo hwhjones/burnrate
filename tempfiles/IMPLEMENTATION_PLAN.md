@@ -46,24 +46,6 @@ Dependencies: H1.
 
 Dependencies: H2A.
 
-### H2C - Estimate Codex credit-equivalent usage
-
-- [ ] Add a separate `CODEX_CREDIT_PRICING` rate card; never mix credit rates
-  with API-equivalent USD rates.
-- [ ] Calculate estimated credits independently from input, cached-input, and
-  output token counts.
-- [ ] Record the authoritative source URL, credit unit, verification date, and
-  effective date for every supported model rate.
-- [ ] Report API-equivalent USD and Codex credit-equivalent usage in separate
-  columns and totals.
-- [ ] Mark credit estimates unavailable for unsupported models or when the
-  applicable rate-card conditions cannot be established.
-- [ ] Warn when fast mode, legacy Enterprise pricing, or other missing log
-  metadata could make actual credit consumption differ from the estimate.
-- [ ] Test every supported model, token category, and incomplete-estimate path.
-
-Dependencies: H2B.
-
 ### H3 - Scope usage keys to sessions
 
 - [ ] Deduplicate cumulative usage using `(session_id, request_id)` instead of
@@ -184,7 +166,7 @@ Dependencies: M3.
   projection exclusions, and CLI exit statuses.
 - [ ] Verify every documented command against an installed package.
 
-Dependencies: H2C, H5, H6, M2, and M3.
+Dependencies: H5, H6, M2, and M3.
 
 ## Low priority / structural improvements v0.1.x
 
@@ -309,6 +291,39 @@ Dependencies: H2B.
   cache multipliers, or provider-reported invoice costs in this change.
 
 Dependencies: L10.
+
+### L12 - Estimate Codex credit-equivalent usage
+
+- [ ] Add a separate `CODEX_CREDIT_PRICING` rate card; never mix credit rates
+  with API-equivalent USD rates.
+- [ ] Calculate estimated credits independently from input, cached-input, and
+  output token counts.
+- [ ] Record the authoritative source URL, credit unit, verification date, and
+  effective date for every supported model rate.
+- [ ] Report API-equivalent USD and Codex credit-equivalent usage in separate
+  columns and totals.
+- [ ] Mark credit estimates unavailable for unsupported models or when the
+  applicable rate-card conditions cannot be established.
+- [ ] Warn when fast mode, legacy Enterprise pricing, or other missing log
+  metadata could make actual credit consumption differ from the estimate.
+- [ ] Test every supported model, token category, and incomplete-estimate path.
+
+Dependencies: H2B.
+
+### L13 - Investigate a Claude retail-plan usage proxy
+
+- [ ] Treat Claude Pro and Max included usage as opaque; do not invent a
+  token-to-credit conversion, allowance percentage, or remaining balance.
+- [ ] Retain API-equivalent USD as a workload-intensity proxy and label it
+  explicitly as distinct from retail-plan allowance consumption.
+- [ ] Determine whether Claude Code logs expose reliable authentication,
+  billing-mode, or provider-reported usage-limit metadata before adding any
+  stronger estimate.
+- [ ] Report retail allowance usage as unavailable when the applicable plan or
+  conversion cannot be established from authoritative data.
+- [ ] Document the limitation and test proxy labeling and unavailable paths.
+
+Dependencies: H2B and L12.
 
 ## Deferred to the product roadmap
 
