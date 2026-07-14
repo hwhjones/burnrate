@@ -34,6 +34,33 @@ class TestCodexParser(unittest.TestCase):
             for entry in data:
                 f.write(json.dumps(entry) + "\n")
 
+    def _codex_usage_record(
+        self,
+        input_tokens,
+        request_id=None,
+        timestamp=None,
+        session_id="identity-session",
+    ):
+        record = {
+            "type": "event_msg",
+            "session_id": session_id,
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "model": "gpt-5.5",
+                    "last_token_usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": 1,
+                    },
+                },
+            },
+        }
+        if request_id is not None:
+            record["requestId"] = request_id
+        if timestamp is not None:
+            record["timestamp"] = timestamp
+        return record
+
     def test_parse_and_summary_basic(self):
         """Codex aggregates multiple token-count events and prints their totals."""
         test_filename = self.test_dir / "mock_codex_basic.jsonl"
@@ -186,6 +213,70 @@ class TestCodexParser(unittest.TestCase):
             {(run["session_id"], run["request_id"]) for run in runs},
             {("session-a", "shared-request"), ("session-b", "shared-request")},
         )
+
+    def test_records_without_request_ids_or_timestamps_are_preserved(self):
+        """Codex gives every identity-deficient source record a unique key."""
+        test_filename = self.test_dir / "identity-deficient.jsonl"
+        repeated_timestamp = "2026-05-25T20:00:00Z"
+        self._create_mock_log(test_filename, [
+            self._codex_usage_record(10, timestamp=repeated_timestamp),
+            self._codex_usage_record(20, timestamp=repeated_timestamp),
+            self._codex_usage_record(30),
+        ])
+
+        parser = CodexParser(log_path=str(test_filename))
+        runs = parser.parse()
+
+        self.assertEqual(len(runs), 3)
+        self.assertEqual(parser.total_tokens, 63)
+        self.assertEqual({run["request_id"] for run in runs}, {None})
+        self.assertEqual({run["source_line"] for run in runs}, {1, 2, 3})
+        self.assertEqual(
+            {run["filepath"] for run in runs},
+            {str(test_filename.resolve())},
+        )
+
+    def test_cumulative_duplicate_uses_newest_parsed_timestamp(self):
+        """Codex chooses cumulative usage by timestamp, not read order."""
+        test_filename = self.test_dir / "out-of-order.jsonl"
+        self._create_mock_log(test_filename, [
+            self._codex_usage_record(
+                200,
+                request_id="cumulative-request",
+                timestamp="2026-05-25T20:10:00Z",
+            ),
+            self._codex_usage_record(
+                100,
+                request_id="cumulative-request",
+                timestamp="2026-05-25T20:00:00Z",
+            ),
+        ])
+
+        run = CodexParser(log_path=str(test_filename)).parse()[0]
+
+        self.assertEqual(run["input_tokens"], 200)
+        self.assertEqual(run["source_line"], 1)
+
+    def test_cumulative_timestamp_ties_use_filepath_and_line(self):
+        """Codex breaks equal-timestamp ties by filepath and source line."""
+        timestamp = "2026-05-25T20:00:00Z"
+        first_file = self.test_dir / "a.jsonl"
+        second_file = self.test_dir / "b.jsonl"
+        self._create_mock_log(first_file, [
+            self._codex_usage_record(100, "tied-request", timestamp),
+            self._codex_usage_record(200, "tied-request", timestamp),
+        ])
+
+        first_run = CodexParser(log_path=str(first_file)).parse()[0]
+        self.assertEqual(first_run["input_tokens"], 200)
+        self.assertEqual(first_run["source_line"], 2)
+
+        self._create_mock_log(second_file, [
+            self._codex_usage_record(300, "tied-request", timestamp),
+        ])
+        final_run = CodexParser(log_path=str(self.test_dir)).parse()[0]
+        self.assertEqual(final_run["input_tokens"], 300)
+        self.assertEqual(final_run["filepath"], str(second_file.resolve()))
 
     def test_cached_input_and_reasoning_are_priced_once(self):
         """Codex prices cached input separately and does not double-charge reasoning."""

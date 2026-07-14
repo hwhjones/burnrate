@@ -1,5 +1,5 @@
 ﻿import json
-from datetime import date as calendar_date
+from datetime import date as calendar_date, datetime, timezone
 from pathlib import Path
 from collections import defaultdict
 from .base import BaseParser
@@ -77,7 +77,7 @@ class ClaudeParser(BaseParser):
         for file_path in files:
             self._parse_file(file_path, request_final_usages)
 
-        for entry in request_final_usages.values():
+        for _, entry in request_final_usages.values():
             self.runs.append(entry)
             self.total_tokens += entry["total_tokens"]
             if entry["cost"] is not None:
@@ -117,15 +117,17 @@ class ClaudeParser(BaseParser):
 
         Args:
             file_path (Path): The path to the JSONL log file.
-            request_final_usages (dict): Latest usage keyed by session and request.
+            request_final_usages (dict): Selection order and final usage keyed
+                by session/request or by source when the request ID is absent.
         """
         if not file_path.is_file():
             return
 
         session_id = self._extract_session_id(file_path)
+        resolved_filepath = str(file_path.resolve())
 
         with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
+            for source_line, line in enumerate(f, start=1):
                 if not line.strip():
                     continue
                 try:
@@ -153,8 +155,8 @@ class ClaudeParser(BaseParser):
                     continue
 
                 request_id = data.get("requestId")
-                if not request_id: # Must have a request_id for de-duplication
-                    continue
+                if not request_id:
+                    request_id = None
 
                 model = self._extract_model(data)
                 costs = calculate_cost(
@@ -169,7 +171,7 @@ class ClaudeParser(BaseParser):
                 sid = data.get("sessionId") or data.get("session_id") or session_id
                 if sid:
                     self.sessions.add(sid) # Track unique session IDs
-                request_final_usages[(sid, request_id)] = {
+                entry = {
                     "session_id": sid,
                     "request_id": request_id,
                     "timestamp": data.get("timestamp"),
@@ -182,8 +184,40 @@ class ClaudeParser(BaseParser):
                     "cost": costs["total"] if costs else None,
                     "c_read_cost": costs["cache_read"] if costs else 0.0,
                     "c_create_cost": costs["cache_write"] if costs else 0.0,
-                    "filepath": str(file_path),
+                    "filepath": resolved_filepath,
+                    "source_line": source_line,
                 }
+                parsed_timestamp = None
+                timestamp = entry["timestamp"]
+                if isinstance(timestamp, str):
+                    try:
+                        parsed_timestamp = datetime.fromisoformat(
+                            timestamp.replace("Z", "+00:00")
+                        )
+                        if parsed_timestamp.tzinfo is None:
+                            parsed_timestamp = parsed_timestamp.replace(
+                                tzinfo=timezone.utc
+                            )
+                        else:
+                            parsed_timestamp = parsed_timestamp.astimezone(
+                                timezone.utc
+                            )
+                    except ValueError:
+                        pass
+                selection_order = (
+                    parsed_timestamp is not None,
+                    parsed_timestamp or datetime.min.replace(tzinfo=timezone.utc),
+                    resolved_filepath,
+                    source_line,
+                )
+                identity = (
+                    (sid, request_id)
+                    if request_id is not None
+                    else (sid, resolved_filepath, source_line)
+                )
+                existing = request_final_usages.get(identity)
+                if existing is None or selection_order > existing[0]:
+                    request_final_usages[identity] = (selection_order, entry)
 
     def summary(self) -> None:
         """Print a summary of the parsed Claude log analysis."""

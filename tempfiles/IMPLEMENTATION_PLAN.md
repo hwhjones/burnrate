@@ -62,12 +62,12 @@ Dependencies: none.
 
 ### H4 - Preserve records without request IDs or timestamps
 
-- [ ] When a request ID is absent, use the resolved filepath and source line
+- [x] When a request ID is absent, use the resolved filepath and source line
   number as a unique identity.
-- [ ] Do not use the timestamp alone as a fallback identity.
-- [ ] Select duplicate cumulative records by parsed timestamp, using sorted
+- [x] Do not use the timestamp alone as a fallback identity.
+- [x] Select duplicate cumulative records by parsed timestamp, using sorted
   filepath and line number as deterministic tie-breakers.
-- [ ] Test missing request IDs, missing timestamps, repeated timestamps, and
+- [x] Test missing request IDs, missing timestamps, repeated timestamps, and
   multiple identity-deficient records.
 
 Dependencies: H3.

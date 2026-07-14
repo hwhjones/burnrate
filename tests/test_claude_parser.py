@@ -33,6 +33,30 @@ class TestClaudeParser(unittest.TestCase):
             for entry in data:
                 f.write(json.dumps(entry) + "\n")
 
+    def _claude_usage_record(
+        self,
+        input_tokens,
+        request_id=None,
+        timestamp=None,
+        session_id="identity-session",
+    ):
+        record = {
+            "type": "assistant",
+            "sessionId": session_id,
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": 1,
+                },
+            },
+        }
+        if request_id is not None:
+            record["requestId"] = request_id
+        if timestamp is not None:
+            record["timestamp"] = timestamp
+        return record
+
     def test_parse_and_summary_basic(self):
         """Claude parses known-model usage and prints the expected totals."""
         test_filename = self.test_dir / "mock_claude_basic.jsonl"
@@ -213,6 +237,70 @@ class TestClaudeParser(unittest.TestCase):
             {(run["session_id"], run["request_id"]) for run in runs},
             {("session-a", "shared-request"), ("session-b", "shared-request")},
         )
+
+    def test_records_without_request_ids_or_timestamps_are_preserved(self):
+        """Claude gives every identity-deficient source record a unique key."""
+        test_filename = self.test_dir / "identity-deficient.jsonl"
+        repeated_timestamp = "2026-05-25T20:00:00Z"
+        self._create_mock_log(test_filename, [
+            self._claude_usage_record(10, timestamp=repeated_timestamp),
+            self._claude_usage_record(20, timestamp=repeated_timestamp),
+            self._claude_usage_record(30),
+        ])
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        runs = parser.parse()
+
+        self.assertEqual(len(runs), 3)
+        self.assertEqual(parser.total_tokens, 63)
+        self.assertEqual({run["request_id"] for run in runs}, {None})
+        self.assertEqual({run["source_line"] for run in runs}, {1, 2, 3})
+        self.assertEqual(
+            {run["filepath"] for run in runs},
+            {str(test_filename.resolve())},
+        )
+
+    def test_cumulative_duplicate_uses_newest_parsed_timestamp(self):
+        """Claude chooses cumulative usage by timestamp, not read order."""
+        test_filename = self.test_dir / "out-of-order.jsonl"
+        self._create_mock_log(test_filename, [
+            self._claude_usage_record(
+                200,
+                request_id="cumulative-request",
+                timestamp="2026-05-25T20:10:00Z",
+            ),
+            self._claude_usage_record(
+                100,
+                request_id="cumulative-request",
+                timestamp="2026-05-25T20:00:00Z",
+            ),
+        ])
+
+        run = ClaudeParser(log_path=str(test_filename)).parse()[0]
+
+        self.assertEqual(run["input_tokens"], 200)
+        self.assertEqual(run["source_line"], 1)
+
+    def test_cumulative_timestamp_ties_use_filepath_and_line(self):
+        """Claude breaks equal-timestamp ties by filepath and source line."""
+        timestamp = "2026-05-25T20:00:00Z"
+        first_file = self.test_dir / "a.jsonl"
+        second_file = self.test_dir / "b.jsonl"
+        self._create_mock_log(first_file, [
+            self._claude_usage_record(100, "tied-request", timestamp),
+            self._claude_usage_record(200, "tied-request", timestamp),
+        ])
+
+        first_run = ClaudeParser(log_path=str(first_file)).parse()[0]
+        self.assertEqual(first_run["input_tokens"], 200)
+        self.assertEqual(first_run["source_line"], 2)
+
+        self._create_mock_log(second_file, [
+            self._claude_usage_record(300, "tied-request", timestamp),
+        ])
+        final_run = ClaudeParser(log_path=str(self.test_dir)).parse()[0]
+        self.assertEqual(final_run["input_tokens"], 300)
+        self.assertEqual(final_run["filepath"], str(second_file.resolve()))
 
     def test_cache_read_and_creation_use_distinct_rates(self):
         """Claude applies distinct rates to cache reads and cache creation."""
