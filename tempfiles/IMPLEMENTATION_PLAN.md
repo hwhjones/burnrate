@@ -19,16 +19,16 @@ Dependencies: none.
 
 ### H2A - Audit and correct API rates
 
-- [ ] Verify every bundled model and token-category rate against an
+- [x] Verify every bundled model and token-category rate against an
   authoritative provider source.
-- [ ] Correct stale rates and remove models or categories that cannot be
+- [x] Correct stale rates and remove models or categories that cannot be
   verified confidently.
-- [ ] Keep the current provider dictionaries and `calculate_cost()` interface
+- [x] Keep the current provider dictionaries and `calculate_cost()` interface
   for this PR so rate corrections remain isolated from structural changes.
-- [ ] Remove inferred cache-rate multipliers; every priced token category must
+- [x] Remove inferred cache-rate multipliers; every priced token category must
   have an explicit verified rate.
-- [ ] Retain unknown or unverifiable models as unpriced instead of guessing.
-- [ ] Add exact calculation fixtures for every supported model and token
+- [x] Retain unknown or unverifiable models as unpriced instead of guessing.
+- [x] Add exact calculation fixtures for every supported model and token
   category, including cache reads and cache writes.
 
 Dependencies: H1.
@@ -289,6 +289,26 @@ Dependencies: M3.
   so they cannot drift independently.
 
 Dependencies: H2B.
+
+### L11 - Add duration-aware cache and long-context pricing
+
+- [ ] Parse Claude cache-creation duration breakdowns and price 5-minute and
+  1-hour writes independently using explicit provider-published rates.
+- [ ] Apply OpenAI whole-request long-context rates when a supported model's
+  input exceeds its published threshold, including the corresponding input,
+  cached-input, and output rates.
+- [ ] Apply provider-documented Claude long-context pricing with the correct
+  threshold and marginal or whole-request semantics for each supported model.
+- [ ] Keep usage unpriced when the log lacks information required to choose a
+  pricing tier or cache duration confidently.
+- [ ] Add boundary fixtures immediately below, at, and above every supported
+  threshold, plus mixed 5-minute and 1-hour cache-write fixtures.
+- [ ] Cross-check calculation fixtures against ccusage behavior while keeping
+  authoritative provider rate cards as the source of pricing truth.
+- [ ] Do not add dynamic pricing downloads, fuzzy model matching, inferred
+  cache multipliers, or provider-reported invoice costs in this change.
+
+Dependencies: L10.
 
 ## Deferred to the product roadmap
 
