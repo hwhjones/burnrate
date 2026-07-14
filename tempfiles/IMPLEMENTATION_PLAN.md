@@ -5,6 +5,9 @@ mergeable pull request. Dependencies indicate merge order; PRs without a
 dependency can be developed independently. Every PR must pass the complete
 existing test suite plus its focused tests.
 
+All High and Medium priority work is required for the v0.1.1 release. Low
+priority work is not a v0.1.1 release blocker.
+
 ## High priority v0.1.1
 
 ### H1 - Treat missing Codex model metadata as unpriced
@@ -80,7 +83,7 @@ Dependencies: H3.
 - [ ] Test all-dated, mixed, all-undated, invalid-timestamp, and single-day
   scans.
 
-Dependencies: none.
+Dependencies: H4.
 
 ### H6 - Report skipped and malformed records
 
@@ -149,7 +152,7 @@ Dependencies: H8.
 
 Dependencies: none.
 
-### M7 - Use one version source
+### M4 - Use one version source
 
 - [ ] Make `pyproject.toml` authoritative for the package version.
 - [ ] Expose the installed version through `importlib.metadata`.
@@ -159,14 +162,28 @@ Dependencies: none.
 
 Dependencies: M3.
 
-### M9 - Synchronize README documentation
+### M5 - Synchronize README documentation
 
 - [ ] Update the project tree to list all current modules and tests.
 - [ ] Document parser diagnostics, partial costs, API-equivalent USD,
   projection exclusions, and CLI exit statuses.
 - [ ] Verify every documented command against an installed package.
 
-Dependencies: H5, H6, M2, and M3.
+Dependencies: all High priority work and M1 through M4.
+
+### M6 - Prepare and verify the v0.1.1 release
+
+- [ ] Set the authoritative package version to `0.1.1`.
+- [ ] Run the complete test suite against the supported Python versions.
+- [ ] Build the source distribution and wheel, install the wheel in an
+  isolated environment, and run console-command and module-command smoke
+  tests.
+- [ ] Confirm installed and source-tree version reporting both return
+  `0.1.1`.
+- [ ] Confirm the release verification leaves no tracked generated artifacts
+  or undocumented user-facing behavior.
+
+Dependencies: M5.
 
 ## Low priority / structural improvements v0.1.x
 
