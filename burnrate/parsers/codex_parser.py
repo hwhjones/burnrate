@@ -56,8 +56,7 @@ class CodexParser(BaseParser):
             print(f"[CODEX] Error: {self.log_dir} is not a file or directory.")
             return []
 
-        # Buffered collection: Stores the latest usage entry for each unique request ID.
-        # This prevents over-counting when logs contain multiple cumulative updates for the same request.
+        # Store the latest cumulative usage for each request within its session.
         request_final_usages = {}
 
         for file_path in files:
@@ -92,13 +91,11 @@ class CodexParser(BaseParser):
         return self.runs
 
     def _parse_file(self, file_path: Path, request_final_usages: dict) -> None:
-        """Parse a single Codex log file and update the buffered collection of final usages.
+        """Parse a Codex log file and update session-scoped final usages.
 
         Args:
             file_path (Path): The path to the JSONL log file.
-            request_final_usages (dict): A dictionary to store the latest usage entry
-                                         for each unique request ID encountered across all files.
-                                         This handles cumulative updates in logs.
+            request_final_usages (dict): Latest usage keyed by session and request.
         """
         if not file_path.is_file():
             return
@@ -163,8 +160,10 @@ class CodexParser(BaseParser):
                         cache_read_tokens=cache_read,
                     )
 
-                    # Store the latest entry for this requestId (cumulative usage)
-                    request_final_usages[request_id] = {
+                    # Replace only cumulative updates from this same session.
+                    request_final_usages[(sid, request_id)] = {
+                        "session_id": sid,
+                        "request_id": request_id,
                         "timestamp": data.get("timestamp"),
                         "input_tokens": input_tokens,
                         "model": model,

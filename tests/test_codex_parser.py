@@ -94,6 +94,99 @@ class TestCodexParser(unittest.TestCase):
             self.assertIn("Estimates are not provider invoices.", output)
             self.assertIn("does not calculate Codex credit use.", output)
 
+    def test_repeated_request_id_within_session_keeps_latest_usage(self):
+        """Codex deduplicates cumulative updates within one session."""
+        test_filename = self.test_dir / "codex-session.jsonl"
+        records = []
+        for timestamp, input_tokens in [
+            ("2026-05-25T20:00:00Z", 100),
+            ("2026-05-25T20:01:00Z", 250),
+        ]:
+            records.append({
+                "type": "event_msg",
+                "session_id": "session-a",
+                "requestId": "shared-request",
+                "timestamp": timestamp,
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "model": "gpt-5.5",
+                        "last_token_usage": {
+                            "input_tokens": input_tokens,
+                            "output_tokens": 20,
+                        },
+                    },
+                },
+            })
+        self._create_mock_log(test_filename, records)
+
+        runs = CodexParser(log_path=str(test_filename)).parse()
+
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["session_id"], "session-a")
+        self.assertEqual(runs[0]["request_id"], "shared-request")
+        self.assertEqual(runs[0]["input_tokens"], 250)
+
+    def test_same_request_id_in_different_sessions_is_retained(self):
+        """Codex does not merge equal request IDs from distinct sessions."""
+        test_filename = self.test_dir / "codex-sessions.jsonl"
+        records = []
+        for session_id, input_tokens in [("session-a", 100), ("session-b", 200)]:
+            records.append({
+                "type": "event_msg",
+                "session_id": session_id,
+                "requestId": "shared-request",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "model": "gpt-5.5",
+                        "last_token_usage": {
+                            "input_tokens": input_tokens,
+                            "output_tokens": 20,
+                        },
+                    },
+                },
+            })
+        self._create_mock_log(test_filename, records)
+
+        parser = CodexParser(log_path=str(test_filename))
+        runs = parser.parse()
+
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(parser.total_tokens, 340)
+        self.assertEqual(
+            {(run["session_id"], run["request_id"]) for run in runs},
+            {("session-a", "shared-request"), ("session-b", "shared-request")},
+        )
+
+    def test_filename_scopes_request_id_when_session_metadata_is_missing(self):
+        """Codex falls back to each source filename for session identity."""
+        for filename, input_tokens in [("session-a.jsonl", 100), ("session-b.jsonl", 200)]:
+            self._create_mock_log(self.test_dir / filename, [{
+                "type": "event_msg",
+                "requestId": "shared-request",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "model": "gpt-5.5",
+                        "last_token_usage": {
+                            "input_tokens": input_tokens,
+                            "output_tokens": 20,
+                        },
+                    },
+                },
+            }])
+
+        runs = CodexParser(log_path=str(self.test_dir)).parse()
+
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(
+            {(run["session_id"], run["request_id"]) for run in runs},
+            {("session-a", "shared-request"), ("session-b", "shared-request")},
+        )
+
     def test_cached_input_and_reasoning_are_priced_once(self):
         """Codex prices cached input separately and does not double-charge reasoning."""
         test_filename = self.test_dir / "mock_codex_pricing.jsonl"

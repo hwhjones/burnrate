@@ -51,11 +51,11 @@ Dependencies: H2A.
 
 ### H3 - Scope usage keys to sessions
 
-- [ ] Deduplicate cumulative usage using `(session_id, request_id)` instead of
+- [x] Deduplicate cumulative usage using `(session_id, request_id)` instead of
   request ID alone.
-- [ ] Resolve session IDs from record metadata and then the source filename.
-- [ ] Retain `session_id` and `request_id` in returned usage records.
-- [ ] Test repeated request IDs within one session and identical request IDs
+- [x] Resolve session IDs from record metadata and then the source filename.
+- [x] Retain `session_id` and `request_id` in returned usage records.
+- [x] Test repeated request IDs within one session and identical request IDs
   across sessions and files.
 
 Dependencies: none.

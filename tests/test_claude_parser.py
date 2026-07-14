@@ -133,6 +133,8 @@ class TestClaudeParser(unittest.TestCase):
         self.assertEqual(len(runs), 1) # Only one unique request_id
         final_run = runs[0]
         # Assert the values of the final (cumulative) run.
+        self.assertEqual(final_run["session_id"], "claude-session-123")
+        self.assertEqual(final_run["request_id"], "req_01_dedup")
         self.assertEqual(final_run["input_tokens"], 15)
         self.assertEqual(final_run["output_tokens"], 8)
         self.assertEqual(final_run["cache_creation_tokens"], 120)
@@ -157,6 +159,60 @@ class TestClaudeParser(unittest.TestCase):
             self.assertIn("94.15%", output) # Cache percentage
             self.assertIn("250", output) # Cache Read
             self.assertIn("120", output) # Cache Create
+
+    def test_same_request_id_in_different_sessions_is_retained(self):
+        """Claude does not merge equal request IDs from distinct sessions."""
+        test_filename = self.test_dir / "claude-sessions.jsonl"
+        records = []
+        for session_id, input_tokens in [("session-a", 100), ("session-b", 200)]:
+            records.append({
+                "type": "assistant",
+                "sessionId": session_id,
+                "requestId": "shared-request",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "message": {
+                    "model": "claude-sonnet-4-5-20250929",
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": 20,
+                    },
+                },
+            })
+        self._create_mock_log(test_filename, records)
+
+        parser = ClaudeParser(log_path=str(test_filename))
+        runs = parser.parse()
+
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(parser.total_tokens, 340)
+        self.assertEqual(
+            {(run["session_id"], run["request_id"]) for run in runs},
+            {("session-a", "shared-request"), ("session-b", "shared-request")},
+        )
+
+    def test_filename_scopes_request_id_when_session_metadata_is_missing(self):
+        """Claude falls back to each source filename for session identity."""
+        for filename, input_tokens in [("session-a.jsonl", 100), ("session-b.jsonl", 200)]:
+            self._create_mock_log(self.test_dir / filename, [{
+                "type": "assistant",
+                "requestId": "shared-request",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "message": {
+                    "model": "claude-sonnet-4-5-20250929",
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": 20,
+                    },
+                },
+            }])
+
+        runs = ClaudeParser(log_path=str(self.test_dir)).parse()
+
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(
+            {(run["session_id"], run["request_id"]) for run in runs},
+            {("session-a", "shared-request"), ("session-b", "shared-request")},
+        )
 
     def test_cache_read_and_creation_use_distinct_rates(self):
         """Claude applies distinct rates to cache reads and cache creation."""

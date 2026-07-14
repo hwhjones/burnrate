@@ -77,7 +77,7 @@ class ClaudeParser(BaseParser):
         for file_path in files:
             self._parse_file(file_path, request_final_usages)
 
-        for rid, entry in request_final_usages.items():
+        for entry in request_final_usages.values():
             self.runs.append(entry)
             self.total_tokens += entry["total_tokens"]
             if entry["cost"] is not None:
@@ -108,17 +108,16 @@ class ClaudeParser(BaseParser):
         return self.runs
 
     def _parse_file(self, file_path: Path, request_final_usages: dict) -> None:
-        """Extract usage from a single Claude log file and update the buffered collection.
+        """Extract usage and update the session-scoped buffered collection.
 
         This method uses guard clauses to minimize nesting and improve readability.
         It processes each line, extracts relevant usage data, and stores it in
-        `request_final_usages`, overwriting previous entries for the same request ID
-        to capture the final cumulative usage.
+        `request_final_usages`, overwriting previous entries for the same request
+        within the same session to capture the final cumulative usage.
 
         Args:
             file_path (Path): The path to the JSONL log file.
-            request_final_usages (dict): A dictionary to store the latest usage entry
-                                         for each unique request ID encountered across all files.
+            request_final_usages (dict): Latest usage keyed by session and request.
         """
         if not file_path.is_file():
             return
@@ -170,7 +169,9 @@ class ClaudeParser(BaseParser):
                 sid = data.get("sessionId") or data.get("session_id") or session_id
                 if sid:
                     self.sessions.add(sid) # Track unique session IDs
-                request_final_usages[request_id] = {
+                request_final_usages[(sid, request_id)] = {
+                    "session_id": sid,
+                    "request_id": request_id,
                     "timestamp": data.get("timestamp"),
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
