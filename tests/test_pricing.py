@@ -1,9 +1,26 @@
 import unittest
+from datetime import date
 
-from burnrate.pricing import CLAUDE_PRICING, CODEX_PRICING, calculate_cost
+from burnrate.pricing import (
+    CLAUDE_PRICING,
+    CLAUDE_PRICING_METADATA,
+    CODEX_PRICING,
+    CODEX_PRICING_METADATA,
+    calculate_cost,
+)
 
 
 class TestPricing(unittest.TestCase):
+
+    REQUIRED_METADATA_FIELDS = {
+        "source_url",
+        "currency",
+        "source_unit",
+        "stored_unit",
+        "verified_on",
+        "effective_date",
+        "effective_date_status",
+    }
 
     EXPECTED_RATES_PER_MILLION = {
         "codex": {
@@ -100,6 +117,30 @@ class TestPricing(unittest.TestCase):
                         else:
                             self.assertAlmostEqual(costs[category], expected_cost)
                             self.assertAlmostEqual(costs["total"], expected_cost)
+
+    def test_every_priced_model_has_complete_provider_metadata(self):
+        """Every priced model is covered by complete, consistently formatted provenance."""
+        providers = {
+            "codex": (CODEX_PRICING, CODEX_PRICING_METADATA),
+            "claude": (CLAUDE_PRICING, CLAUDE_PRICING_METADATA),
+        }
+
+        for provider, (pricing, metadata) in providers.items():
+            for model in pricing:
+                with self.subTest(provider=provider, model=model):
+                    self.assertEqual(set(metadata), self.REQUIRED_METADATA_FIELDS)
+                    self.assertTrue(metadata["source_url"].startswith("https://"))
+                    self.assertEqual(metadata["currency"], "USD")
+                    self.assertEqual(metadata["source_unit"], "per_million_tokens")
+                    self.assertEqual(metadata["stored_unit"], "per_token")
+                    date.fromisoformat(metadata["verified_on"])
+
+                    status = metadata["effective_date_status"]
+                    self.assertIn(status, {"published", "unknown"})
+                    if status == "published":
+                        date.fromisoformat(metadata["effective_date"])
+                    else:
+                        self.assertIsNone(metadata["effective_date"])
 
     def test_codex_cost_includes_input_output_and_cache_read(self):
         """Shared pricing calculates every supported Codex token category."""

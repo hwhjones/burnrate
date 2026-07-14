@@ -35,14 +35,14 @@ Dependencies: H1.
 
 ### H2B - Add pricing provenance and API-equivalent labels
 
-- [ ] Add plain-dictionary metadata for source URL, USD currency, source and
+- [x] Add plain-dictionary metadata for source URL, USD currency, source and
   stored units, verification date, and effective-date status.
-- [ ] Record an explicit unknown status when an authoritative source does not
+- [x] Record an explicit unknown status when an authoritative source does not
   publish an effective date; do not invent one.
-- [ ] Label calculated cost as API-equivalent USD in documentation and output.
-- [ ] State explicitly that estimates are not provider invoices and that
+- [x] Label calculated cost as API-equivalent USD in documentation and output.
+- [x] State explicitly that estimates are not provider invoices and that
   BurnRate does not yet calculate Codex credit use.
-- [ ] Test metadata completeness and formatting for every priced model.
+- [x] Test metadata completeness and formatting for every priced model.
 
 Dependencies: H2A.
 

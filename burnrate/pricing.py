@@ -1,5 +1,28 @@
 """Shared model pricing tables and cost calculations."""
 
+CODEX_PRICING_METADATA = {
+    "source_url": "https://developers.openai.com/api/docs/pricing",
+    "currency": "USD",
+    "source_unit": "per_million_tokens",
+    "stored_unit": "per_token",
+    "verified_on": "2026-07-14",
+    "effective_date": None,
+    "effective_date_status": "unknown",
+}
+
+CLAUDE_PRICING_METADATA = {
+    "source_url": (
+        "https://www-cdn.anthropic.com/files/4zrzovbb/website/"
+        "3684c2faafb97418665782cea0001f439f74b1d2.pdf"
+    ),
+    "currency": "USD",
+    "source_unit": "per_million_tokens",
+    "stored_unit": "per_token",
+    "verified_on": "2026-07-14",
+    "effective_date": "2026-05-27",
+    "effective_date_status": "published",
+}
+
 CODEX_PRICING = {
     "gpt-5.6": {
         "input": 0.000005,

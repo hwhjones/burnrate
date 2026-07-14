@@ -222,8 +222,8 @@ class ClaudeParser(BaseParser):
                 grouped_stats[date][model]["cost"] += run["cost"]
 
         # Print table header
-        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Cache Create':>12} {'Cache Read':>10} {'Cost':>8}")
-        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*8}")
+        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Cache Create':>12} {'Cache Read':>10} {'API-equivalent USD':>18}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*18}")
 
         # Print grouped data
         total_input_agg = 0
@@ -240,7 +240,7 @@ class ClaudeParser(BaseParser):
                 cache_r = stats["cache_read"]
                 cache_c = stats["cache_creation"] # Get cache creation for current row
                 cost_v = stats["cost"]
-                cost_display = f"{cost_v:>8.2f}" if stats["priced"] else f"{'UNPRICED':>8}"
+                cost_display = f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
 
                 total_input_agg += input_t
                 total_output_agg += output_t
@@ -251,8 +251,8 @@ class ClaudeParser(BaseParser):
                 print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {cache_c:>12,} {cache_r:>10,} {cost_display}")
 
         # Print totals row
-        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*8}")
-        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_cache_creation_agg:>12,} {total_cache_read_agg:>10,} {total_cost_agg:>8.2f}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*18}")
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_cache_creation_agg:>12,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}")
         print(f"[CLAUDE] =========================")
 
         # Additional metrics using the overall totals from parsing
@@ -264,7 +264,7 @@ class ClaudeParser(BaseParser):
         if self.unknown_models:
             models = ", ".join(sorted(self.unknown_models))
             print(f"[CLAUDE] Unpriced models:                  {models}")
-            print("[CLAUDE] Cost totals and projection:       incomplete")
+            print("[CLAUDE] API-equivalent USD totals/projection: incomplete")
         else:
             try:
                 dates = [
@@ -277,9 +277,11 @@ class ClaudeParser(BaseParser):
                 projected_30_day_cost = average_daily_cost * 30
 
                 print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
-                print(f"[CLAUDE] Average daily cost:              ${average_daily_cost:.2f}")
-                print(f"[CLAUDE] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
+                print(f"[CLAUDE] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
+                print(f"[CLAUDE] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
             except (ValueError, TypeError):
-                print("[CLAUDE] Projected 30-day cost:           unavailable (invalid timestamps)")
+                print("[CLAUDE] Projected 30-day API-equivalent USD: unavailable (invalid timestamps)")
 
+        print("[CLAUDE] Estimates are not provider invoices.")
+        print("[CLAUDE] BurnRate does not calculate Codex credit use.")
         print(f"[CLAUDE] =========================")

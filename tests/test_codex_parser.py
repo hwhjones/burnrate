@@ -90,6 +90,9 @@ class TestCodexParser(unittest.TestCase):
             self.assertIn(f"{expected_total_input:,}", output)
             self.assertIn(f"{expected_total_output:,}", output)
             self.assertIn(f"{expected_total_cost:.2f}", output)
+            self.assertIn("API-equivalent USD", output)
+            self.assertIn("Estimates are not provider invoices.", output)
+            self.assertIn("does not calculate Codex credit use.", output)
 
     def test_cached_input_and_reasoning_are_priced_once(self):
         """Codex prices cached input separately and does not double-charge reasoning."""

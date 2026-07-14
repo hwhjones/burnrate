@@ -83,7 +83,9 @@ parser.summary()
 
 ## Cost estimates
 
-Pricing is defined by the static model tables bundled with BurnRate. These rates may need updating when providers change their prices or introduce new models.
+BurnRate reports cost as API-equivalent USD using the static model tables bundled with the application. The source URL, units, verification date, and effective-date status for each provider are recorded in `burnrate/pricing.py`. These rates may need updating when providers change their prices or introduce new models.
+
+These estimates are not provider invoices. BurnRate does not currently calculate Codex credit use.
 
 Unknown models are still included in token totals, but they are displayed as `UNPRICED`. When unpriced models are present, cost totals and projections are marked as incomplete.
 

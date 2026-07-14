@@ -215,8 +215,8 @@ class CodexParser(BaseParser):
                 grouped_stats[date][model]["cost"] += run["cost"]
 
         # Print table header
-        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Reasoning':>9} {'Cache Read':>10} {'Cost':>8}")
-        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*8}")
+        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Reasoning':>9} {'Cache Read':>10} {'API-equivalent USD':>18}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*18}")
 
         # Print grouped data
         total_input_agg = 0
@@ -233,7 +233,7 @@ class CodexParser(BaseParser):
                 reasoning_t = stats["reasoning"]
                 cache_r = stats["cache_read"]
                 cost_v = stats["cost"]
-                cost_display = f"{cost_v:>8.2f}" if stats["priced"] else f"{'UNPRICED':>8}"
+                cost_display = f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
 
                 total_input_agg += input_t
                 total_output_agg += output_t
@@ -244,8 +244,8 @@ class CodexParser(BaseParser):
                 print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {reasoning_t:>9,} {cache_r:>10,} {cost_display}")
 
         # Print totals row
-        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*8}")
-        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_agg:>8.2f}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*18}")
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}")
         print(f"[CODEX] =========================")
 
         # Additional metrics using the overall totals from parsing
@@ -256,7 +256,7 @@ class CodexParser(BaseParser):
         if self.unknown_models:
             models = ", ".join(sorted(self.unknown_models))
             print(f"[CODEX] Unpriced models:                  {models}")
-            print("[CODEX] Cost totals and projection:       incomplete")
+            print("[CODEX] API-equivalent USD totals/projection: incomplete")
         else:
             try:
                 dates = [
@@ -269,9 +269,11 @@ class CodexParser(BaseParser):
                 projected_30_day_cost = average_daily_cost * 30
 
                 print(f"[CODEX] Observed period:                 {observed_days} day(s)")
-                print(f"[CODEX] Average daily cost:              ${average_daily_cost:.2f}")
-                print(f"[CODEX] Projected 30-day cost:           ~${projected_30_day_cost:.2f}")
+                print(f"[CODEX] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
+                print(f"[CODEX] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
             except (ValueError, TypeError):
-                print("[CODEX] Projected 30-day cost:           unavailable (invalid timestamps)")
+                print("[CODEX] Projected 30-day API-equivalent USD: unavailable (invalid timestamps)")
 
+        print("[CODEX] Estimates are not provider invoices.")
+        print("[CODEX] BurnRate does not calculate Codex credit use.")
         print(f"[CODEX] =========================")

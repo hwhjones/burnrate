@@ -76,6 +76,9 @@ class TestClaudeParser(unittest.TestCase):
             self.assertIn("10", output) # Input tokens
             self.assertIn("5", output)  # Output tokens
             self.assertIn("0.00", output) # Total cost
+            self.assertIn("API-equivalent USD", output)
+            self.assertIn("Estimates are not provider invoices.", output)
+            self.assertIn("does not calculate Codex credit use.", output)
 
     def test_parse_and_summary_deduplication(self):
         """Claude keeps the latest cumulative usage for a repeated request ID."""
