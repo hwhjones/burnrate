@@ -342,9 +342,33 @@ Dependencies: H2B.
 
 Dependencies: H2B and L12.
 
+### L14 - Extract small shared parser helpers
+
+- [ ] Extract identical token validation, timestamp selection-order, folder
+  aggregation, and dated-projection calculations into focused protected
+  helpers.
+- [ ] Keep provider-specific record shapes, usage extraction, pricing inputs,
+  and summary columns in the concrete parsers.
+- [ ] Do not introduce a generic `_parse_file()` workflow or a parser
+  framework that obscures the Codex and Claude control flow.
+- [ ] Preserve existing parser attributes, console output, diagnostics, and
+  dictionary-based return values.
+- [ ] Measure the reduction in duplicated code and retain focused regression
+  coverage for every extracted helper.
+
+Dependencies: H5 and H6. Coordinate with L3 and L5 to avoid duplicate work.
+
 ## Deferred to the product roadmap
 
-- Context growth, cache share, replay ratio, and personal session baselines.
+- Audit-grade cost build-up waterfalls, period-over-period driver attribution,
+  counterfactual pricing scenarios, and confidence or coverage indicators for
+  every explanation.
+- Privacy-preserving, tokenhabit-style efficiency diagnostics for context
+  growth, compaction overruns, repeated reads, output floods, cache-disrupting
+  behavior, and other measurable usage patterns; keep heuristic waste estimates
+  and recommendations clearly separate from exact accounting results.
+- Personal session baselines and anomaly detection across cost and efficiency
+  metrics.
 - Historical and versioned rate-card resolution and pricing update commands.
 - Recommendations, budgets, exports, dashboards, and content-aware analysis.
 
