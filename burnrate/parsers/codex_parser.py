@@ -1,8 +1,8 @@
 import json
-from datetime import date as calendar_date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
-from .base import BaseParser
+from .base import BaseParser, parse_timestamp_date
 from ..pricing import CODEX_PRICING, calculate_cost
 
 # Backward-compatible alias for existing imports.
@@ -23,6 +23,7 @@ class CodexParser(BaseParser):
         self.total_cache_read_cost = 0.0
         self.stats_by_folder = {}
         self.unknown_models = set()
+        self._reset_diagnostics()
 
     def _extract_session_id(self, file_path: Path) -> str:
         stem = file_path.stem
@@ -43,6 +44,7 @@ class CodexParser(BaseParser):
         self.total_cache_read_cost = 0.0
         self.stats_by_folder.clear()
         self.unknown_models.clear()
+        self._reset_diagnostics()
 
         if not self.log_dir.exists():
             print(f"[CODEX] Error: Directory {self.log_dir} not found.")
@@ -101,7 +103,6 @@ class CodexParser(BaseParser):
         if not file_path.is_file():
             return
 
-        folder = file_path.parent.name
         current_model = "UNKNOWN_MODEL"
         session_id = self._extract_session_id(file_path)
         resolved_filepath = str(file_path.resolve())
@@ -112,57 +113,92 @@ class CodexParser(BaseParser):
                     continue
                 try:
                     data = json.loads(line)
-                    if not isinstance(data, dict):
-                        continue
-                    msg_type = data.get("type")
+                except json.JSONDecodeError:
+                    self._record_skip("malformed_json")
+                    continue
 
-                    if msg_type == "turn_context":
-                        context_model = data.get("payload", {}).get("model")
-                        if context_model:
-                            current_model = context_model
-                        continue
+                if not isinstance(data, dict):
+                    self._record_skip("non_object_json")
+                    continue
 
-                    # Guard clauses for early exit
-                    if msg_type == "response_item":
-                        continue
-                    if msg_type != "event_msg":
-                        continue
-                    
+                msg_type = data.get("type")
+
+                if msg_type == "turn_context":
                     payload = data.get("payload")
-                    if not payload or payload.get("type") != "token_count":
+                    if not isinstance(payload, dict):
+                        self._record_skip("invalid_record_shape")
                         continue
-                    
-                    info = payload.get("info")
-                    if not info:
-                        continue
+                    context_model = payload.get("model")
+                    if context_model:
+                        current_model = context_model
+                    continue
 
-                    usage = info.get("last_token_usage")
-                    if not usage:
-                        continue
+                # Expected non-usage records are filtered without diagnostics.
+                if msg_type == "response_item" or msg_type != "event_msg":
+                    continue
 
-                    model = info.get("model") or current_model
+                payload = data.get("payload")
+                if not isinstance(payload, dict):
+                    self._record_skip("invalid_record_shape")
+                    continue
+                if payload.get("type") != "token_count":
+                    continue
 
-                    sid = data.get("session_id") or data.get("payload", {}).get("session_id") or session_id
-                    if sid:
-                        self.sessions.add(sid)
+                info = payload.get("info")
+                if not isinstance(info, dict):
+                    self._record_skip("invalid_record_shape", usage_like=True)
+                    continue
 
-                    gross_input = usage.get("input_tokens", 0) or 0
-                    cache_read = usage.get("cached_input_tokens", 0) or 0
-                    input_tokens = max(0, gross_input - cache_read) # Net input
-                    output_tokens = usage.get("output_tokens", 0) or 0
-                    reasoning = usage.get("reasoning_output_tokens", 0) or 0
-                    total_tokens = input_tokens + output_tokens + cache_read
+                usage = info.get("last_token_usage")
+                if usage is None or usage == {}:
+                    self._record_skip("unusable_usage_record", usage_like=True)
+                    continue
+                if not isinstance(usage, dict):
+                    self._record_skip("invalid_record_shape", usage_like=True)
+                    continue
 
-                    request_id = data.get("requestId") or None
-                    costs = calculate_cost(
-                        PRICING,
-                        model,
-                        input_tokens,
-                        output_tokens,
-                        cache_read_tokens=cache_read,
-                    )
+                token_fields = (
+                    "input_tokens",
+                    "cached_input_tokens",
+                    "output_tokens",
+                    "reasoning_output_tokens",
+                )
+                if any(
+                    isinstance(usage.get(field), bool)
+                    or not isinstance(usage.get(field, 0) or 0, int)
+                    or (usage.get(field, 0) or 0) < 0
+                    for field in token_fields
+                ):
+                    self._record_skip("unusable_usage_record", usage_like=True)
+                    continue
 
-                    entry = {
+                model = info.get("model") or current_model
+
+                sid = data.get("session_id") or payload.get("session_id") or session_id
+                if sid:
+                    self.sessions.add(sid)
+
+                gross_input = usage.get("input_tokens", 0) or 0
+                cache_read = usage.get("cached_input_tokens", 0) or 0
+                input_tokens = max(0, gross_input - cache_read) # Net input
+                output_tokens = usage.get("output_tokens", 0) or 0
+                reasoning = usage.get("reasoning_output_tokens", 0) or 0
+                total_tokens = input_tokens + output_tokens + cache_read
+
+                if total_tokens == 0:
+                    self._record_skip("unusable_usage_record", usage_like=True)
+                    continue
+
+                request_id = data.get("requestId") or None
+                costs = calculate_cost(
+                    PRICING,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    cache_read_tokens=cache_read,
+                )
+
+                entry = {
                         "session_id": sid,
                         "request_id": request_id,
                         "timestamp": data.get("timestamp"),
@@ -176,47 +212,46 @@ class CodexParser(BaseParser):
                         "c_read_cost": costs["cache_read"] if costs else 0.0,
                         "filepath": resolved_filepath,
                         "source_line": source_line,
-                    }
-                    parsed_timestamp = None
-                    timestamp = entry["timestamp"]
-                    if isinstance(timestamp, str):
-                        try:
-                            parsed_timestamp = datetime.fromisoformat(
-                                timestamp.replace("Z", "+00:00")
+                }
+                parsed_timestamp = None
+                timestamp = entry["timestamp"]
+                if isinstance(timestamp, str):
+                    try:
+                        parsed_timestamp = datetime.fromisoformat(
+                            timestamp.replace("Z", "+00:00")
+                        )
+                        if parsed_timestamp.tzinfo is None:
+                            parsed_timestamp = parsed_timestamp.replace(
+                                tzinfo=timezone.utc
                             )
-                            if parsed_timestamp.tzinfo is None:
-                                parsed_timestamp = parsed_timestamp.replace(
-                                    tzinfo=timezone.utc
-                                )
-                            else:
-                                parsed_timestamp = parsed_timestamp.astimezone(
-                                    timezone.utc
-                                )
-                        except ValueError:
-                            pass
-                    selection_order = (
+                        else:
+                            parsed_timestamp = parsed_timestamp.astimezone(
+                                timezone.utc
+                            )
+                    except ValueError:
+                        pass
+                selection_order = (
                         parsed_timestamp is not None,
                         parsed_timestamp
                         or datetime.min.replace(tzinfo=timezone.utc),
                         resolved_filepath,
                         source_line,
-                    )
-                    identity = (
+                )
+                identity = (
                         (sid, request_id)
                         if request_id is not None
                         else (sid, resolved_filepath, source_line)
-                    )
-                    existing = request_final_usages.get(identity)
-                    if existing is None or selection_order > existing[0]:
-                        request_final_usages[identity] = (selection_order, entry)
-                except json.JSONDecodeError:
-                    continue
+                )
+                existing = request_final_usages.get(identity)
+                if existing is None or selection_order > existing[0]:
+                    request_final_usages[identity] = (selection_order, entry)
 
     def summary(self):
         """Print a summary of the parsed Codex log analysis."""
         print(f"\n[CODEX] =========================")
         print(f"[CODEX] LOG ANALYSIS: {self.log_dir}")
         print(f"[CODEX] =========================")
+        self._print_diagnostics("CODEX")
 
         if not self.runs:
             print("[CODEX] No runs found to summarize.")
@@ -234,8 +269,16 @@ class CodexParser(BaseParser):
             "priced": True,
         }))
 
+        dated_runs = []
+        undated_runs = []
         for run in self.runs:
-            date = run["timestamp"][:10] if run.get("timestamp") else "UNKNOWN_DATE"
+            parsed_date = parse_timestamp_date(run.get("timestamp"))
+            if parsed_date is None:
+                date = "UNDATED"
+                undated_runs.append(run)
+            else:
+                date = parsed_date.isoformat()
+                dated_runs.append((run, parsed_date))
             model = run.get("model", "UNKNOWN_MODEL")
             
             grouped_stats[date][model]["input"] += run.get("input_tokens", 0)
@@ -286,26 +329,34 @@ class CodexParser(BaseParser):
         cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
         print(f"[CODEX] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
 
+        if undated_runs:
+            undated_known_cost = sum(
+                run["cost"] for run in undated_runs if run.get("cost") is not None
+            )
+            print(
+                "[CODEX] Undated records excluded from projection: "
+                f"{len(undated_runs)} (${undated_known_cost:.2f} known cost)"
+            )
+
         if self.unknown_models:
             models = ", ".join(sorted(self.unknown_models))
             print(f"[CODEX] Unpriced models:                  {models}")
             print("[CODEX] API-equivalent USD totals/projection: incomplete")
-        else:
-            try:
-                dates = [
-                    calendar_date.fromisoformat(run["timestamp"][:10])
-                    for run in self.runs
-                    if run.get("timestamp")
-                ]
-                observed_days = (max(dates) - min(dates)).days + 1
-                average_daily_cost = self.total_cost / observed_days
-                projected_30_day_cost = average_daily_cost * 30
 
-                print(f"[CODEX] Observed period:                 {observed_days} day(s)")
-                print(f"[CODEX] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
-                print(f"[CODEX] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
-            except (ValueError, TypeError):
-                print("[CODEX] Projected 30-day API-equivalent USD: unavailable (invalid timestamps)")
+        if not dated_runs:
+            print("[CODEX] Projected 30-day API-equivalent USD: unavailable (no valid dated records)")
+        elif not self.unknown_models:
+            dates = [parsed_date for _, parsed_date in dated_runs]
+            observed_days = (max(dates) - min(dates)).days + 1
+            dated_known_cost = sum(
+                run["cost"] for run, _ in dated_runs if run.get("cost") is not None
+            )
+            average_daily_cost = dated_known_cost / observed_days
+            projected_30_day_cost = average_daily_cost * 30
+
+            print(f"[CODEX] Observed period:                 {observed_days} day(s)")
+            print(f"[CODEX] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
+            print(f"[CODEX] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
 
         print("[CODEX] Estimates are not provider invoices.")
         print("[CODEX] BurnRate does not calculate Codex credit use.")

@@ -1,8 +1,8 @@
 ﻿import json
-from datetime import date as calendar_date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
-from .base import BaseParser
+from .base import BaseParser, parse_timestamp_date
 from ..pricing import CLAUDE_PRICING, calculate_cost
 
 # Backward-compatible alias for existing imports.
@@ -25,6 +25,7 @@ class ClaudeParser(BaseParser):
         self.total_cache_creation_cost = 0.0
         self.stats_by_folder = {}
         self.unknown_models = set()
+        self._reset_diagnostics()
 
     def _extract_session_id(self, file_path: Path) -> str:
         """Construct a session identifier from a log file name."""
@@ -59,6 +60,7 @@ class ClaudeParser(BaseParser):
         self.total_cache_creation_cost = 0.0
         self.stats_by_folder.clear()
         self.unknown_models.clear()
+        self._reset_diagnostics()
 
         if not self.log_dir.exists():
             print(f"[CLAUDE] Error: Path {self.log_dir} not found.")
@@ -133,16 +135,48 @@ class ClaudeParser(BaseParser):
                 try:
                     data = json.loads(line)
                 except json.JSONDecodeError:
+                    self._record_skip("malformed_json")
                     continue
 
                 if not isinstance(data, dict):
+                    self._record_skip("non_object_json")
                     continue
 
                 if data.get("type") != "assistant": # Only process assistant messages for usage
                     continue
 
-                usage = self._extract_usage(data)
-                if not usage:
+                if "usage" in data:
+                    usage = data["usage"]
+                    if not isinstance(usage, dict):
+                        self._record_skip("invalid_record_shape", usage_like=True)
+                        continue
+                else:
+                    message = data.get("message")
+                    if not isinstance(message, dict):
+                        self._record_skip("invalid_record_shape", usage_like=True)
+                        continue
+                    usage = message.get("usage")
+
+                if usage is None or usage == {}:
+                    self._record_skip("unusable_usage_record", usage_like=True)
+                    continue
+                if not isinstance(usage, dict):
+                    self._record_skip("invalid_record_shape", usage_like=True)
+                    continue
+
+                token_fields = (
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_input_tokens",
+                    "cache_creation_input_tokens",
+                )
+                if any(
+                    isinstance(usage.get(field), bool)
+                    or not isinstance(usage.get(field, 0) or 0, int)
+                    or (usage.get(field, 0) or 0) < 0
+                    for field in token_fields
+                ):
+                    self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
                 input_tokens = usage.get("input_tokens", 0) or 0
@@ -152,6 +186,7 @@ class ClaudeParser(BaseParser):
                 total_tokens = input_tokens + cache_create + cache_read + output_tokens
 
                 if total_tokens == 0: # Skip if no tokens were used
+                    self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
                 request_id = data.get("requestId")
@@ -224,6 +259,7 @@ class ClaudeParser(BaseParser):
         print(f"\n[CLAUDE] =========================")
         print(f"[CLAUDE] LOG ANALYSIS: {self.log_dir}")
         print(f"[CLAUDE] =========================")
+        self._print_diagnostics("CLAUDE")
 
         if not self.runs:
             print("[CLAUDE] No runs found to summarize.")
@@ -241,8 +277,16 @@ class ClaudeParser(BaseParser):
             "priced": True,
         }))
 
+        dated_runs = []
+        undated_runs = []
         for run in self.runs:
-            date = run["timestamp"][:10] if run.get("timestamp") else "UNKNOWN_DATE"
+            parsed_date = parse_timestamp_date(run.get("timestamp"))
+            if parsed_date is None:
+                date = "UNDATED"
+                undated_runs.append(run)
+            else:
+                date = parsed_date.isoformat()
+                dated_runs.append((run, parsed_date))
             model = run.get("model", "UNKNOWN_MODEL")
 
             grouped_stats[date][model]["input"] += run.get("input_tokens", 0)
@@ -296,26 +340,34 @@ class ClaudeParser(BaseParser):
         cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
         print(f"[CLAUDE] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
 
+        if undated_runs:
+            undated_known_cost = sum(
+                run["cost"] for run in undated_runs if run.get("cost") is not None
+            )
+            print(
+                "[CLAUDE] Undated records excluded from projection: "
+                f"{len(undated_runs)} (${undated_known_cost:.2f} known cost)"
+            )
+
         if self.unknown_models:
             models = ", ".join(sorted(self.unknown_models))
             print(f"[CLAUDE] Unpriced models:                  {models}")
             print("[CLAUDE] API-equivalent USD totals/projection: incomplete")
-        else:
-            try:
-                dates = [
-                    calendar_date.fromisoformat(run["timestamp"][:10])
-                    for run in self.runs
-                    if run.get("timestamp")
-                ]
-                observed_days = (max(dates) - min(dates)).days + 1
-                average_daily_cost = self.total_cost / observed_days
-                projected_30_day_cost = average_daily_cost * 30
 
-                print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
-                print(f"[CLAUDE] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
-                print(f"[CLAUDE] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
-            except (ValueError, TypeError):
-                print("[CLAUDE] Projected 30-day API-equivalent USD: unavailable (invalid timestamps)")
+        if not dated_runs:
+            print("[CLAUDE] Projected 30-day API-equivalent USD: unavailable (no valid dated records)")
+        elif not self.unknown_models:
+            dates = [parsed_date for _, parsed_date in dated_runs]
+            observed_days = (max(dates) - min(dates)).days + 1
+            dated_known_cost = sum(
+                run["cost"] for run, _ in dated_runs if run.get("cost") is not None
+            )
+            average_daily_cost = dated_known_cost / observed_days
+            projected_30_day_cost = average_daily_cost * 30
+
+            print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
+            print(f"[CLAUDE] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
+            print(f"[CLAUDE] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
 
         print("[CLAUDE] Estimates are not provider invoices.")
         print("[CLAUDE] BurnRate does not calculate Codex credit use.")

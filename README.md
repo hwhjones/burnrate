@@ -89,7 +89,9 @@ These estimates are not provider invoices. BurnRate does not currently calculate
 
 Unknown models are still included in token totals, but they are displayed as `UNPRICED`. When unpriced models are present, cost totals and projections are marked as incomplete.
 
-The projected 30-day cost is calculated from the average daily cost across the inclusive calendar range between the earliest and latest parsed records. A short observation period may produce a volatile projection.
+When input records are malformed or cannot be used, the summary reports skip counts by category. Recognizable usage records that cannot be counted also mark the reported totals as potentially incomplete. Expected non-usage records are filtered without generating this warning.
+
+The projected 30-day cost is calculated from the average daily known cost of dated records across the inclusive calendar range between the earliest and latest valid timestamps. Records with missing or invalid timestamps remain in usage and known-cost totals, but their known cost is reported and excluded from the projection. If no valid dated records exist, the projection is unavailable. A short observation period may produce a volatile projection.
 
 ## Testing
 

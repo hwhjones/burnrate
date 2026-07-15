@@ -74,26 +74,26 @@ Dependencies: H3.
 
 ### H5 - Correct projections containing undated records
 
-- [ ] Parse dates defensively and classify missing or invalid timestamps as
+- [x] Parse dates defensively and classify missing or invalid timestamps as
   undated.
-- [ ] Include undated records in usage totals and known-cost totals.
-- [ ] Exclude undated cost from the dated 30-day projection and report the
+- [x] Include undated records in usage totals and known-cost totals.
+- [x] Exclude undated cost from the dated 30-day projection and report the
   number and known cost of excluded records.
-- [ ] Mark the projection unavailable when no valid dated records exist.
-- [ ] Test all-dated, mixed, all-undated, invalid-timestamp, and single-day
+- [x] Mark the projection unavailable when no valid dated records exist.
+- [x] Test all-dated, mixed, all-undated, invalid-timestamp, and single-day
   scans.
 
 Dependencies: H4.
 
 ### H6 - Report skipped and malformed records
 
-- [ ] Count malformed JSON, non-object JSON, invalid record shapes, and
+- [x] Count malformed JSON, non-object JSON, invalid record shapes, and
   unusable usage records by category.
-- [ ] Print a concise diagnostic summary after parsing.
-- [ ] Mark totals as potentially incomplete when usage-like records were
+- [x] Print a concise diagnostic summary after parsing.
+- [x] Mark totals as potentially incomplete when usage-like records were
   rejected.
-- [ ] Reset all diagnostic state at the beginning of every parse.
-- [ ] Test each skip category, mixed valid and invalid files, and repeated
+- [x] Reset all diagnostic state at the beginning of every parse.
+- [x] Test each skip category, mixed valid and invalid files, and repeated
   parsing.
 
 Dependencies: none.
