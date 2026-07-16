@@ -120,30 +120,99 @@ Dependencies: H6.
 
 Dependencies: H6.
 
+### H9 - Validate cross-field token invariants
+
+- [ ] Reject Codex usage records where `cached_input_tokens` exceeds
+  `input_tokens`; do not hide the inconsistency with clamping.
+- [ ] Reject records where supplied `reasoning_output_tokens` exceeds
+  `output_tokens`.
+- [ ] When `total_tokens` is supplied, require it to equal `input_tokens` plus
+  `output_tokens`; continue to allow the field to be absent.
+- [ ] Record rejected values as unusable usage and mark totals as potentially
+  incomplete through the existing H6 diagnostics.
+- [ ] Preserve valid lower, equal, absent, and zero values for every invariant.
+- [ ] Test each boundary and mismatch for known and unknown models.
+
+Dependencies: H6 and H7.
+
+### H10 - Validate model and identity metadata
+
+- [ ] Accept non-empty string values for model, session ID, and request ID
+  fields before using them in pricing lookups, sets, or dictionary keys.
+- [ ] Treat absent, `null`, and empty identity values as missing and use the
+  existing deterministic fallbacks.
+- [ ] Preserve missing-model behavior as `UNKNOWN_MODEL` and unpriced.
+- [ ] Reject supplied booleans, numbers, lists, and mappings as invalid record
+  shapes; do not stringify or otherwise coerce them.
+- [ ] Validate Codex `turn_context.model`, `info.model`, session IDs, and
+  request IDs, plus the corresponding Claude message and top-level fields.
+- [ ] Mark rejected usage-like records as potentially incomplete through H6
+  and continue parsing later records.
+- [ ] Test every invalid type, missing and empty values, and valid strings for
+  both parsers.
+
+Dependencies: H6 and H7.
+
+### H11 - Make fallback session identities path-unique
+
+- [ ] Use the resolved source filepath, not only the filename stem, when
+  explicit session metadata is absent.
+- [ ] Preserve valid explicit session metadata unchanged.
+- [ ] Keep returned fallback `session_id` values deterministic and
+  string-valued.
+- [ ] Retain identical request IDs from files with the same basename in
+  different directories while preserving deduplication within one file.
+- [ ] Add recursive-directory fixtures for both parsers and update existing
+  filename-fallback assertions.
+
+Dependencies: H3, H4, and H10.
+
 ## Medium priority v0.1.1
 
 ### M1 - Accept UTF-8 BOM files
 
-- [ ] Read JSONL using `utf-8-sig`.
+- [ ] Read JSONL using `utf-8-sig` so a leading UTF-8 BOM is consumed without
+  changing ordinary UTF-8 behavior.
 - [ ] Ensure the first record of ordinary UTF-8 and BOM-prefixed files is
-  retained.
-- [ ] Add BOM and non-BOM fixtures for both parsers.
+  retained by both parsers.
+- [ ] Add single-file and directory-scan fixtures for BOM and non-BOM input.
+- [ ] Confirm BOM handling does not change malformed-record or file-read
+  diagnostics.
 
-Dependencies: none.
+Dependencies: H6 and H8.
 
-### M2 - Return meaningful CLI exit statuses
+### M2 - Handle filesystem discovery failures
 
-- [ ] Change `run()` to return an integer status.
-- [ ] Exit `2` for an invalid top-level input path, `1` for an incomplete scan
-  caused by file errors, and `0` for a complete scan.
-- [ ] Continue to return `0` for reported malformed records when all input
-  files were readable.
-- [ ] Propagate the status through the console and module entry points.
-- [ ] Test every exit path and existing parser dispatch behavior.
+- [ ] Catch `OSError` failures from top-level path inspection and recursive
+  JSONL discovery, not only failures raised while reading an individual file.
+- [ ] Distinguish an invalid top-level input from a partially completed
+  directory scan so M3 can return the correct status.
+- [ ] Preserve results from files successfully discovered and parsed before a
+  later discovery failure, while marking the scan incomplete.
+- [ ] Print one concise, path-specific diagnostic for each inspection or
+  discovery failure without a traceback.
+- [ ] Reset discovery-error state at the start of every parse.
+- [ ] Test missing paths, inspection failures, enumeration failures after
+  successful files, empty directories, and repeated parsing for both parsers.
 
 Dependencies: H8.
 
-### M3 - Correct the build configuration
+### M3 - Return meaningful CLI exit statuses
+
+- [ ] Change `run()` to return an integer status while preserving parser
+  selection, output, and direct Python usage.
+- [ ] Exit `2` for an invalid top-level input path, `1` for an incomplete scan
+  caused by file or discovery errors, and `0` for a complete scan.
+- [ ] Continue to return `0` for reported malformed records when all input
+  files were readable and discovery completed.
+- [ ] Propagate the status through the console entry point,
+  `python -m burnrate`, and direct `burnrate.main.run()` calls.
+- [ ] Test every exit path for both parsers plus existing argument-dispatch
+  behavior.
+
+Dependencies: H8 and M2.
+
+### M4 - Correct the build configuration
 
 - [ ] Raise the build requirement to `setuptools>=61`.
 - [ ] Declare `setuptools.build_meta` as the build backend.
@@ -152,7 +221,7 @@ Dependencies: H8.
 
 Dependencies: none.
 
-### M4 - Use one version source
+### M5 - Use one version source
 
 - [ ] Make `pyproject.toml` authoritative for the package version.
 - [ ] Expose the installed version through `importlib.metadata`.
@@ -160,18 +229,19 @@ Dependencies: none.
   unavailable.
 - [ ] Test installed and source-tree version access.
 
-Dependencies: M3.
+Dependencies: M4.
 
-### M5 - Synchronize README documentation
+### M6 - Synchronize README documentation
 
 - [ ] Update the project tree to list all current modules and tests.
 - [ ] Document parser diagnostics, partial costs, API-equivalent USD,
-  projection exclusions, and CLI exit statuses.
+  projection exclusions, BOM handling, conditional-pricing assumptions,
+  unpriced conditional records, incomplete scans, and CLI exit statuses.
 - [ ] Verify every documented command against an installed package.
 
-Dependencies: all High priority work and M1 through M4.
+Dependencies: all High priority work plus M1 through M5.
 
-### M6 - Prepare and verify the v0.1.1 release
+### M7 - Prepare and verify the v0.1.1 release
 
 - [ ] Set the authoritative package version to `0.1.1`.
 - [ ] Run the complete test suite against the supported Python versions.
@@ -182,8 +252,10 @@ Dependencies: all High priority work and M1 through M4.
   `0.1.1`.
 - [ ] Confirm the release verification leaves no tracked generated artifacts
   or undocumented user-facing behavior.
+- [ ] Prepare a v0.1.1 change summary covering parser correctness, pricing
+  assumptions, diagnostics, CLI statuses, and known limitations.
 
-Dependencies: M5.
+Dependencies: M6.
 
 ## Low priority / structural improvements v0.1.x
 
@@ -198,14 +270,14 @@ Dependencies: all high-priority parser work.
 
 ### L2 - Split filesystem discovery from record parsing
 
-- [ ] Create a shared discovery layer for validating inputs and finding sorted
-  JSONL files.
+- [ ] Extract the validated M2 discovery behavior into a shared layer for
+  input validation and deterministic JSONL discovery.
 - [ ] Keep provider-specific record interpretation inside each parser.
 - [ ] Preserve current single-file and recursive-directory behavior.
 - [ ] Test files, recursive directories, empty directories, invalid paths, and
   deterministic discovery order.
 
-Dependencies: L1.
+Dependencies: M2 and L1.
 
 ### L3 - Separate aggregation from console rendering
 
@@ -226,7 +298,7 @@ Dependencies: L1.
   series.
 - [ ] Test the old import, new import, console command, and module execution.
 
-Dependencies: M2.
+Dependencies: M3.
 
 ### L5 - Strengthen the `BaseParser` contract
 
@@ -263,7 +335,7 @@ Dependencies: L6.
 - [ ] Run Ruff checks and package-build smoke tests.
 - [ ] Cache only safe dependency and build artifacts.
 
-Dependencies: M3 and L7.
+Dependencies: M4 and L7.
 
 ### L9 - Complete package metadata
 
@@ -272,7 +344,7 @@ Dependencies: M3 and L7.
 - [ ] Use the existing repository and license information.
 - [ ] Validate the metadata through the built wheel.
 
-Dependencies: M3.
+Dependencies: M4.
 
 ### L10 - Unify the API pricing structure
 
@@ -287,29 +359,9 @@ Dependencies: M3.
 - [ ] Keep pricing data, provenance, and effective-date information together
   so they cannot drift independently.
 
-Dependencies: H2B.
+Dependencies: L14, L15, and L16.
 
-### L11 - Add duration-aware cache and long-context pricing
-
-- [ ] Parse Claude cache-creation duration breakdowns and price 5-minute and
-  1-hour writes independently using explicit provider-published rates.
-- [ ] Apply OpenAI whole-request long-context rates when a supported model's
-  input exceeds its published threshold, including the corresponding input,
-  cached-input, and output rates.
-- [ ] Apply provider-documented Claude long-context pricing with the correct
-  threshold and marginal or whole-request semantics for each supported model.
-- [ ] Keep usage unpriced when the log lacks information required to choose a
-  pricing tier or cache duration confidently.
-- [ ] Add boundary fixtures immediately below, at, and above every supported
-  threshold, plus mixed 5-minute and 1-hour cache-write fixtures.
-- [ ] Cross-check calculation fixtures against ccusage behavior while keeping
-  authoritative provider rate cards as the source of pricing truth.
-- [ ] Do not add dynamic pricing downloads, fuzzy model matching, inferred
-  cache multipliers, or provider-reported invoice costs in this change.
-
-Dependencies: L10.
-
-### L12 - Estimate Codex credit-equivalent usage
+### L11 - Estimate Codex credit-equivalent usage
 
 - [ ] Add a separate `CODEX_CREDIT_PRICING` rate card; never mix credit rates
   with API-equivalent USD rates.
@@ -327,7 +379,7 @@ Dependencies: L10.
 
 Dependencies: H2B.
 
-### L13 - Investigate a Claude retail-plan usage proxy
+### L12 - Investigate a Claude retail-plan usage proxy
 
 - [ ] Treat Claude Pro and Max included usage as opaque; do not invent a
   token-to-credit conversion, allowance percentage, or remaining balance.
@@ -340,9 +392,9 @@ Dependencies: H2B.
   conversion cannot be established from authoritative data.
 - [ ] Document the limitation and test proxy labeling and unavailable paths.
 
-Dependencies: H2B and L12.
+Dependencies: H2B and L11.
 
-### L14 - Extract small shared parser helpers
+### L13 - Extract small shared parser helpers
 
 - [ ] Extract identical token validation, timestamp selection-order, folder
   aggregation, and dated-projection calculations into focused protected
@@ -356,10 +408,78 @@ Dependencies: H2B and L12.
 - [ ] Measure the reduction in duplicated code and retain focused regression
   coverage for every extracted helper.
 
-Dependencies: H5 and H6. Coordinate with L3 and L5 to avoid duplicate work.
+Dependencies: H5, H6, and H9. Coordinate with L3 and L5 to avoid duplicate
+work.
+
+### L14 - Add Claude cache-duration pricing
+
+- [ ] Parse Claude cache-creation duration breakdowns and price 5-minute and
+  1-hour writes independently using explicit provider-published rates.
+- [ ] Confirm `cache_creation_input_tokens` equals the sum of the supplied
+  5-minute and 1-hour breakdown; reject inconsistent records.
+- [ ] Keep cache creation unpriced when a nonzero total lacks the duration
+  breakdown required to select a rate confidently.
+- [ ] Preserve the current provider dictionaries and `calculate_cost()`
+  interface in this PR so pricing correctness remains isolated from L10.
+- [ ] Add 5-minute-only, 1-hour-only, mixed-duration, absent-breakdown, zero,
+  and inconsistent-total fixtures for every supported Claude model.
+- [ ] Cross-check fixtures against ccusage behavior while keeping authoritative
+  provider rate cards as the source of pricing truth.
+
+Dependencies: H2B.
+
+### L15 - Add OpenAI long-context pricing
+
+- [ ] Record explicit provider-published long-context thresholds and rates for
+  supported OpenAI models; do not infer rates for other models.
+- [ ] Apply whole-request long-context pricing when input exceeds the model's
+  published threshold, including input, cached-input, and output categories.
+- [ ] Keep unsupported or ambiguous long-context records unpriced instead of
+  applying standard rates confidently.
+- [ ] Preserve the current provider dictionaries and `calculate_cost()`
+  interface in this PR so pricing correctness remains isolated from L10.
+- [ ] Add fixtures immediately below, at, and above every supported threshold,
+  including cached-input and output calculations.
+
+Dependencies: H2B and H9.
+
+### L16 - Add Claude conditional and long-context pricing
+
+- [ ] Audit which long-context, inference-geography, platform, batch, and other
+  pricing-condition fields are retained reliably in Claude Code logs.
+- [ ] Apply provider-documented Claude long-context pricing using the correct
+  threshold and marginal or whole-request semantics for each supported model.
+- [ ] Apply supported geography or platform modifiers only when the required
+  log metadata establishes them unambiguously.
+- [ ] Keep usage unpriced when a material pricing condition cannot be
+  established from the log; state the API-equivalent assumptions explicitly.
+- [ ] Preserve the current provider dictionaries and `calculate_cost()`
+  interface in this PR so pricing correctness remains isolated from L10.
+- [ ] Add boundary fixtures plus global, US-only, missing-condition, and
+  unsupported-platform fixtures for every affected model.
+- [ ] Cross-check fixtures against ccusage behavior while keeping authoritative
+  provider rate cards as the source of pricing truth.
+
+Dependencies: H2B and L14.
 
 ## Deferred to the product roadmap
 
+- Position BurnRate as the FinOps and cost-intelligence layer for AI coding
+  agents: explain and govern the economics of AI software development rather
+  than becoming a general-purpose enterprise AI control plane.
+- Add an organisation-aware usage ledger with accounts, teams, developers or
+  devices, repositories or projects, providers, agents, sessions, models,
+  cost centres, pricing versions, and completeness status as first-class
+  dimensions.
+- Support privacy-preserving local collectors and scheduled aggregation across
+  machines, sending usage metadata by default without prompts, source code, or
+  generated content.
+- Build team reporting around cost-driver attribution, reporting-device
+  coverage, forecasts, budgets, anomaly alerts, and deterministic CSV, JSON,
+  accounting, and data-warehouse exports.
+- Add enterprise controls only after the ledger is stable: SSO/SAML, role-based
+  access, retention policies, audit logs, regional or self-hosted deployment,
+  webhooks, cost-centre mapping, and policy integrations.
 - Audit-grade cost build-up waterfalls, period-over-period driver attribution,
   counterfactual pricing scenarios, and confidence or coverage indicators for
   every explanation.
@@ -370,7 +490,7 @@ Dependencies: H5 and H6. Coordinate with L3 and L5 to avoid duplicate work.
 - Personal session baselines and anomaly detection across cost and efficiency
   metrics.
 - Historical and versioned rate-card resolution and pricing update commands.
-- Recommendations, budgets, exports, dashboards, and content-aware analysis.
+- Recommendations, dashboards, and opt-in content-aware analysis.
 
 ## Completed work
 
