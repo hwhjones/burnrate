@@ -34,20 +34,41 @@ class BaseParser(ABC):
     """
 
     def _reset_diagnostics(self) -> None:
-        """Clear record-rejection diagnostics for a new scan."""
+        """Clear record and file diagnostics for a new scan."""
         self.skip_counts = {category: 0 for category in SKIP_CATEGORIES}
         self.rejected_usage_records = 0
+        self.file_read_errors = []
+        self.totals_potentially_incomplete = False
+        self.scan_incomplete = False
 
     def _record_skip(self, category: str, *, usage_like: bool = False) -> None:
         """Record why an input record was rejected."""
         self.skip_counts[category] += 1
         if usage_like:
             self.rejected_usage_records += 1
+            self.totals_potentially_incomplete = True
 
-    @property
-    def totals_potentially_incomplete(self) -> bool:
-        """Whether recognizable usage records were rejected by the scan."""
-        return self.rejected_usage_records > 0
+    def _record_file_error(
+        self,
+        provider: str,
+        file_path,
+        error: Exception,
+    ) -> None:
+        """Record and report a file that could not be read completely."""
+        detail = (
+            "invalid UTF-8"
+            if isinstance(error, UnicodeError)
+            else str(error).strip() or error.__class__.__name__
+        )
+        self.file_read_errors.append(
+            {
+                "filepath": str(file_path),
+                "error": error.__class__.__name__,
+                "message": detail,
+            }
+        )
+        self.scan_incomplete = True
+        print(f"[{provider}] Could not read {file_path}: {detail}")
 
     def _print_diagnostics(self, provider: str) -> None:
         """Print a compact summary when the scan rejected any records."""

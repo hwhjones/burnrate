@@ -64,7 +64,10 @@ class CodexParser(BaseParser):
 
         for file_path in files:
             # Process each log file to populate the buffered collection.
-            self._parse_file(file_path, request_final_usages)
+            try:
+                self._parse_file(file_path, request_final_usages)
+            except (OSError, UnicodeError) as error:
+                self._record_file_error("CODEX", file_path, error)
 
         for _, entry in request_final_usages.values():
             self.runs.append(entry)

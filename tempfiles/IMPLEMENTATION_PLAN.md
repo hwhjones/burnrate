@@ -111,11 +111,11 @@ Dependencies: H6.
 
 ### H8 - Handle unreadable and undecodable files
 
-- [ ] Catch per-file `OSError` and `UnicodeError` failures.
-- [ ] Continue scanning other files after a failure.
-- [ ] Print one concise, filepath-specific diagnostic for each affected file.
-- [ ] Expose whether the scan was incomplete because a file could not be read.
-- [ ] Test one failed file among valid files and a single unreadable input
+- [x] Catch per-file `OSError` and `UnicodeError` failures.
+- [x] Continue scanning other files after a failure.
+- [x] Print one concise, filepath-specific diagnostic for each affected file.
+- [x] Expose whether the scan was incomplete because a file could not be read.
+- [x] Test one failed file among valid files and a single unreadable input
   file.
 
 Dependencies: H6.

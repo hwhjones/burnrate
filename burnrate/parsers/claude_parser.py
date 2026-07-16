@@ -80,7 +80,10 @@ class ClaudeParser(BaseParser):
         request_final_usages = {}
 
         for file_path in files:
-            self._parse_file(file_path, request_final_usages)
+            try:
+                self._parse_file(file_path, request_final_usages)
+            except (OSError, UnicodeError) as error:
+                self._record_file_error("CLAUDE", file_path, error)
 
         for _, entry in request_final_usages.values():
             self.runs.append(entry)
