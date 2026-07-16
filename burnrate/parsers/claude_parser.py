@@ -1,4 +1,5 @@
 ﻿import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
@@ -38,7 +39,9 @@ class ClaudeParser(BaseParser):
 
     def _extract_model(self, data: dict) -> str:
         """Extract the used model name from a log record."""
-        message = data.get("message") or {}
+        message = data.get("message")
+        if not isinstance(message, Mapping):
+            return "claude"
         return message.get("model") or "claude"
 
     def _extract_usage(self, data: dict) -> dict:
@@ -147,12 +150,12 @@ class ClaudeParser(BaseParser):
 
                 if "usage" in data:
                     usage = data["usage"]
-                    if not isinstance(usage, dict):
+                    if not isinstance(usage, Mapping):
                         self._record_skip("invalid_record_shape", usage_like=True)
                         continue
                 else:
                     message = data.get("message")
-                    if not isinstance(message, dict):
+                    if not isinstance(message, Mapping):
                         self._record_skip("invalid_record_shape", usage_like=True)
                         continue
                     usage = message.get("usage")
@@ -160,7 +163,7 @@ class ClaudeParser(BaseParser):
                 if usage is None or usage == {}:
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
-                if not isinstance(usage, dict):
+                if not isinstance(usage, Mapping):
                     self._record_skip("invalid_record_shape", usage_like=True)
                     continue
 
@@ -170,19 +173,27 @@ class ClaudeParser(BaseParser):
                     "cache_read_input_tokens",
                     "cache_creation_input_tokens",
                 )
-                if any(
-                    isinstance(usage.get(field), bool)
-                    or not isinstance(usage.get(field, 0) or 0, int)
-                    or (usage.get(field, 0) or 0) < 0
-                    for field in token_fields
-                ):
+                token_values = {}
+                invalid_token_value = False
+                for field in token_fields:
+                    value = usage[field] if field in usage else 0
+                    if (
+                        isinstance(value, bool)
+                        or not isinstance(value, int)
+                        or value < 0
+                    ):
+                        invalid_token_value = True
+                        break
+                    token_values[field] = value
+
+                if invalid_token_value:
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
-                input_tokens = usage.get("input_tokens", 0) or 0
-                output_tokens = usage.get("output_tokens", 0) or 0
-                cache_read = usage.get("cache_read_input_tokens", 0) or 0
-                cache_create = usage.get("cache_creation_input_tokens", 0) or 0
+                input_tokens = token_values["input_tokens"]
+                output_tokens = token_values["output_tokens"]
+                cache_read = token_values["cache_read_input_tokens"]
+                cache_create = token_values["cache_creation_input_tokens"]
                 total_tokens = input_tokens + cache_create + cache_read + output_tokens
 
                 if total_tokens == 0: # Skip if no tokens were used

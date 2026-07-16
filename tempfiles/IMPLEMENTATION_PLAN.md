@@ -100,11 +100,11 @@ Dependencies: none.
 
 ### H7 - Validate nested structures and token values
 
-- [ ] Confirm nested payloads are mappings before accessing them.
-- [ ] Treat absent token fields as zero.
-- [ ] Reject records containing supplied token values that are booleans,
+- [x] Confirm nested payloads are mappings before accessing them.
+- [x] Treat absent token fields as zero.
+- [x] Reject records containing supplied token values that are booleans,
   non-integers, or negative; do not coerce numeric strings.
-- [ ] Test invalid payloads, lists instead of mappings, strings, floats,
+- [x] Test invalid payloads, lists instead of mappings, strings, floats,
   booleans, negative values, and valid zero values.
 
 Dependencies: H6.

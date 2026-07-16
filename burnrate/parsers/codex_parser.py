@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
@@ -125,7 +126,7 @@ class CodexParser(BaseParser):
 
                 if msg_type == "turn_context":
                     payload = data.get("payload")
-                    if not isinstance(payload, dict):
+                    if not isinstance(payload, Mapping):
                         self._record_skip("invalid_record_shape")
                         continue
                     context_model = payload.get("model")
@@ -138,14 +139,14 @@ class CodexParser(BaseParser):
                     continue
 
                 payload = data.get("payload")
-                if not isinstance(payload, dict):
+                if not isinstance(payload, Mapping):
                     self._record_skip("invalid_record_shape")
                     continue
                 if payload.get("type") != "token_count":
                     continue
 
                 info = payload.get("info")
-                if not isinstance(info, dict):
+                if not isinstance(info, Mapping):
                     self._record_skip("invalid_record_shape", usage_like=True)
                     continue
 
@@ -153,7 +154,7 @@ class CodexParser(BaseParser):
                 if usage is None or usage == {}:
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
-                if not isinstance(usage, dict):
+                if not isinstance(usage, Mapping):
                     self._record_skip("invalid_record_shape", usage_like=True)
                     continue
 
@@ -163,12 +164,20 @@ class CodexParser(BaseParser):
                     "output_tokens",
                     "reasoning_output_tokens",
                 )
-                if any(
-                    isinstance(usage.get(field), bool)
-                    or not isinstance(usage.get(field, 0) or 0, int)
-                    or (usage.get(field, 0) or 0) < 0
-                    for field in token_fields
-                ):
+                token_values = {}
+                invalid_token_value = False
+                for field in token_fields:
+                    value = usage[field] if field in usage else 0
+                    if (
+                        isinstance(value, bool)
+                        or not isinstance(value, int)
+                        or value < 0
+                    ):
+                        invalid_token_value = True
+                        break
+                    token_values[field] = value
+
+                if invalid_token_value:
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
@@ -178,11 +187,11 @@ class CodexParser(BaseParser):
                 if sid:
                     self.sessions.add(sid)
 
-                gross_input = usage.get("input_tokens", 0) or 0
-                cache_read = usage.get("cached_input_tokens", 0) or 0
+                gross_input = token_values["input_tokens"]
+                cache_read = token_values["cached_input_tokens"]
                 input_tokens = max(0, gross_input - cache_read) # Net input
-                output_tokens = usage.get("output_tokens", 0) or 0
-                reasoning = usage.get("reasoning_output_tokens", 0) or 0
+                output_tokens = token_values["output_tokens"]
+                reasoning = token_values["reasoning_output_tokens"]
                 total_tokens = input_tokens + output_tokens + cache_read
 
                 if total_tokens == 0:
