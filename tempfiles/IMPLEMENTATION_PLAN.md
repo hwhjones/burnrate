@@ -259,21 +259,21 @@ Dependencies: none.
 
 ### M5 - Use one version source
 
-- [ ] Make `pyproject.toml` authoritative for the package version.
-- [ ] Expose the installed version through `importlib.metadata`.
-- [ ] Provide a safe source-tree fallback when distribution metadata is
+- [x] Make `pyproject.toml` authoritative for the package version.
+- [x] Expose the installed version through `importlib.metadata`.
+- [x] Provide a safe source-tree fallback when distribution metadata is
   unavailable.
-- [ ] Test installed and source-tree version access.
+- [x] Test installed and source-tree version access.
 
 Dependencies: M4.
 
 ### M6 - Synchronize README documentation
 
-- [ ] Update the project tree to list all current modules and tests.
-- [ ] Document parser diagnostics, partial costs, API-equivalent USD,
+- [x] Update the project tree to list all current modules and tests.
+- [x] Document parser diagnostics, partial costs, API-equivalent USD,
   projection exclusions, BOM handling, conditional-pricing assumptions,
   unpriced conditional records, incomplete scans, and CLI exit statuses.
-- [ ] Verify every documented command against an installed package.
+- [x] Verify every documented command against an installed package.
 
 Dependencies: all High priority work plus M1 through M5.
 
@@ -282,16 +282,17 @@ Dependencies: all High priority work plus M1 through M5.
 - [x] Complete the pre-release cleanup audit: reduce filesystem diagnostics to
   the status flags consumed by the CLI, remove dead Claude extraction helpers,
   and simplify the Codex event guard without changing parser behavior.
-- [ ] Set the authoritative package version to `0.1.1`.
-- [ ] Run the complete test suite against the supported Python versions.
-- [ ] Build the source distribution and wheel, install the wheel in an
+- [x] Add a concise README summary of the v0.1.1 changes and known limitations.
+- [x] Set the authoritative package version to `0.1.1`.
+- [x] Run the complete test suite against the supported Python versions.
+- [x] Build the source distribution and wheel, install the wheel in an
   isolated environment, and run console-command and module-command smoke
   tests.
-- [ ] Confirm installed and source-tree version reporting both return
+- [x] Confirm installed and source-tree version reporting both return
   `0.1.1`.
-- [ ] Confirm the release verification leaves no tracked generated artifacts
+- [x] Confirm the release verification leaves no tracked generated artifacts
   or undocumented user-facing behavior.
-- [ ] Prepare a v0.1.1 change summary covering parser correctness, pricing
+- [x] Prepare a v0.1.1 change summary covering parser correctness, pricing
   assumptions, diagnostics, CLI statuses, and known limitations.
 
 Dependencies: M6.

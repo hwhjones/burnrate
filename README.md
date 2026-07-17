@@ -9,7 +9,18 @@ BurnRate is a small, dependency-free Python utility that parses Codex and Claude
 - Report input, output, cached, and reasoning-token usage where available.
 - Group usage and estimated cost by date and model.
 - Estimate a 30-day cost from the observed calendar range.
-- Report unknown models as unpriced instead of silently applying fallback rates.
+- Report unsupported pricing conditions as unpriced instead of guessing.
+- Read ordinary and BOM-prefixed UTF-8 JSONL files.
+
+## What's new in 0.1.1
+
+- Hardened token, identity, session-deduplication, and malformed-record handling.
+- Added resilient filesystem diagnostics and meaningful CLI exit statuses.
+- Verified API-equivalent USD rates and made unpriced or partial estimates visible.
+- Corrected build metadata and unified runtime and distribution version reporting.
+
+Known limitation: conditional pricing variants and Codex subscription credits are
+not calculated; estimates use the documented standard API-rate assumptions below.
 
 ## Requirements
 
@@ -23,14 +34,7 @@ Create a virtual environment and install BurnRate from the repository:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-Alternatively, install it directly from GitHub:
-
-```powershell
-python -m pip install git+https://github.com/hwhjones/burnrate.git
+python -m pip install .
 ```
 
 ## Usage
@@ -67,6 +71,10 @@ Display all command-line options with:
 burnrate --help
 ```
 
+Exit status is `0` for a complete readable scan, including scans containing
+reported malformed records; `1` for a partial scan caused by file-read or
+directory-discovery errors; and `2` for an invalid top-level input path.
+
 ## Python usage
 
 Parsers can also be used directly:
@@ -81,17 +89,28 @@ parser.summary()
 
 `parse()` returns the parsed usage records and populates aggregate values on the parser instance.
 
+Malformed and unusable records are counted by category. Rejected usage-like
+records mark token totals as potentially incomplete. Unreadable files and
+directory-discovery errors are reported by path; successfully parsed files are
+retained and the scan is marked incomplete.
+
 ## Cost estimates
 
-BurnRate reports cost as API-equivalent USD using the static model tables bundled with the application. The source URL, units, verification date, and effective-date status for each provider are recorded in `burnrate/pricing.py`. These rates may need updating when providers change their prices or introduce new models.
+BurnRate reports API-equivalent USD using static model tables bundled with the
+application. Pricing provenance is recorded in `burnrate/pricing.py`. Estimates
+are not provider invoices, and BurnRate does not calculate Codex credit use.
 
-These estimates are not provider invoices. BurnRate does not currently calculate Codex credit use.
+The tables assume their standard published API rates. Claude cache creation uses
+the single bundled cache-write rate. Cache-duration, long-context, geography,
+batch, and other conditional variants are not inferred from logs.
 
-Unknown models are still included in token totals, but they are displayed as `UNPRICED`. When unpriced models are present, cost totals and projections are marked as incomplete.
+Unknown models and records requiring a token-category rate that is not bundled
+are retained in token totals but shown as `UNPRICED`. Reported cost is then the
+known partial cost, and cost totals and projections are marked incomplete.
 
-When input records are malformed or cannot be used, the summary reports skip counts by category. Recognizable usage records that cannot be counted also mark the reported totals as potentially incomplete. Expected non-usage records are filtered without generating this warning.
-
-The projected 30-day cost is calculated from the average daily known cost of dated records across the inclusive calendar range between the earliest and latest valid timestamps. Records with missing or invalid timestamps remain in usage and known-cost totals, but their known cost is reported and excluded from the projection. If no valid dated records exist, the projection is unavailable. A short observation period may produce a volatile projection.
+The 30-day projection uses dated known cost across the inclusive observed
+calendar range. Undated records remain in totals but are reported and excluded
+from projection; without a valid date, projection is unavailable.
 
 ## Testing
 
@@ -101,27 +120,34 @@ Run the complete test suite from the repository root:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-If the virtual environment is already activated:
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
 ## Project structure
 
 ```text
 burnrate/
 |-- burnrate/
+|   |-- __init__.py
 |   |-- __main__.py
 |   |-- main.py
 |   |-- pricing.py
 |   `-- parsers/
+|       |-- __init__.py
 |       |-- base.py
 |       |-- codex_parser.py
 |       `-- claude_parser.py
+|-- scripts/
+|   `-- smoke_build.py
 |-- tests/
+|   |-- __init__.py
+|   |-- test_claude_parser.py
+|   |-- test_cli.py
 |   |-- test_codex_parser.py
-|   `-- test_claude_parser.py
+|   |-- test_file_read_errors.py
+|   |-- test_parser_diagnostics.py
+|   |-- test_parser_validation.py
+|   |-- test_pricing.py
+|   |-- test_undated_projections.py
+|   `-- test_version.py
+|-- LICENSE
 |-- pyproject.toml
 `-- README.md
 ```
