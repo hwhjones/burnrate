@@ -30,8 +30,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run() -> None:
-    """Execute analysis using the selected parser and print a summary."""
+def run() -> int:
+    """Execute the analysis and return a process-compatible status code."""
     args = parse_args()
     parser_cls = PARSER_MAP[args.parser]
     log_path = args.log_path
@@ -51,6 +51,12 @@ def run() -> None:
     parser.parse()
     parser.summary()
 
+    if parser.invalid_input_path:
+        return 2
+    if parser.scan_incomplete:
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    run()
+    raise SystemExit(run())

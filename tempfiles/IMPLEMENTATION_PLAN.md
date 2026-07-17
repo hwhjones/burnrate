@@ -205,52 +205,54 @@ passes with 59 tests.
 
 ### M1 - Accept UTF-8 BOM files
 
-- [ ] Read JSONL using `utf-8-sig` so a leading UTF-8 BOM is consumed without
+- [x] Read JSONL using `utf-8-sig` so a leading UTF-8 BOM is consumed without
   changing ordinary UTF-8 behavior.
-- [ ] Ensure the first record of ordinary UTF-8 and BOM-prefixed files is
+- [x] Ensure the first record of ordinary UTF-8 and BOM-prefixed files is
   retained by both parsers.
-- [ ] Add single-file and directory-scan fixtures for BOM and non-BOM input.
-- [ ] Confirm BOM handling does not change malformed-record or file-read
+- [x] Add single-file and directory-scan fixtures for BOM and non-BOM input.
+- [x] Confirm BOM handling does not change malformed-record or file-read
   diagnostics.
 
 Dependencies: H6 and H8.
 
 ### M2 - Handle filesystem discovery failures
 
-- [ ] Catch `OSError` failures from top-level path inspection and recursive
+- [x] Catch `OSError` failures from top-level path inspection and recursive
   JSONL discovery, not only failures raised while reading an individual file.
-- [ ] Distinguish an invalid top-level input from a partially completed
+- [x] Distinguish an invalid top-level input from a partially completed
   directory scan so M3 can return the correct status.
-- [ ] Preserve results from files successfully discovered and parsed before a
+- [x] Preserve results from files successfully discovered and parsed before a
   later discovery failure, while marking the scan incomplete.
-- [ ] Print one concise, path-specific diagnostic for each inspection or
+- [x] Print one concise, path-specific diagnostic for each inspection or
   discovery failure without a traceback.
-- [ ] Reset discovery-error state at the start of every parse.
-- [ ] Test missing paths, inspection failures, enumeration failures after
+- [x] Reset discovery-error state at the start of every parse.
+- [x] Test missing paths, inspection failures, enumeration failures after
   successful files, empty directories, and repeated parsing for both parsers.
 
 Dependencies: H8.
 
 ### M3 - Return meaningful CLI exit statuses
 
-- [ ] Change `run()` to return an integer status while preserving parser
+- [x] Change `run()` to return an integer status while preserving parser
   selection, output, and direct Python usage.
-- [ ] Exit `2` for an invalid top-level input path, `1` for an incomplete scan
+- [x] Exit `2` for an invalid top-level input path, `1` for an incomplete scan
   caused by file or discovery errors, and `0` for a complete scan.
-- [ ] Continue to return `0` for reported malformed records when all input
+- [x] Continue to return `0` for reported malformed records when all input
   files were readable and discovery completed.
-- [ ] Propagate the status through the console entry point,
+- [x] Propagate the status through the console entry point,
   `python -m burnrate`, and direct `burnrate.main.run()` calls.
-- [ ] Test every exit path for both parsers plus existing argument-dispatch
+- [x] Test every exit path for both parsers plus existing argument-dispatch
   behavior.
 
 Dependencies: H8 and M2.
 
 ### M4 - Correct the build configuration
 
-- [ ] Raise the build requirement to `setuptools>=61`.
-- [ ] Declare `setuptools.build_meta` as the build backend.
-- [ ] Add source-distribution, wheel, isolated-install, console-command, and
+- [x] Raise the build requirement to `setuptools>=61`.
+- [x] Declare `setuptools.build_meta` as the build backend.
+- [x] Restrict package discovery to `burnrate` so repository support
+  directories cannot be included as top-level packages.
+- [x] Add source-distribution, wheel, isolated-install, console-command, and
   module-command smoke tests.
 
 Dependencies: none.
@@ -277,6 +279,9 @@ Dependencies: all High priority work plus M1 through M5.
 
 ### M7 - Prepare and verify the v0.1.1 release
 
+- [x] Complete the pre-release cleanup audit: reduce filesystem diagnostics to
+  the status flags consumed by the CLI, remove dead Claude extraction helpers,
+  and simplify the Codex event guard without changing parser behavior.
 - [ ] Set the authoritative package version to `0.1.1`.
 - [ ] Run the complete test suite against the supported Python versions.
 - [ ] Build the source distribution and wheel, install the wheel in an

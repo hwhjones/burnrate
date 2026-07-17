@@ -33,18 +33,6 @@ class ClaudeParser(BaseParser):
         self.unknown_models = set()
         self._reset_diagnostics()
 
-    def _extract_model(self, data: dict) -> str:
-        """Extract the used model name from a log record."""
-        message = data.get("message")
-        if not isinstance(message, Mapping):
-            return "UNKNOWN_MODEL"
-        return optional_identity(message.get("model")) or "UNKNOWN_MODEL"
-
-    def _extract_usage(self, data: dict) -> dict:
-        """Normalize the usage payload from different Claude record shapes."""
-        usage = data.get("usage")
-        return usage if isinstance(usage, dict) else (data.get("message", {}).get("usage") if isinstance(data.get("message"), dict) else {})
-
     def parse(self) -> list[dict]:
         """Parse Claude logs and produce a list of individual usage runs."""
         self.runs = []
@@ -61,16 +49,8 @@ class ClaudeParser(BaseParser):
         self.unknown_models.clear()
         self._reset_diagnostics()
 
-        if not self.log_dir.exists():
-            print(f"[CLAUDE] Error: Path {self.log_dir} not found.")
-            return []
-
-        if self.log_dir.is_file():
-            files = [self.log_dir]
-        elif self.log_dir.is_dir():
-            files = sorted(self.log_dir.glob("**/*.jsonl"))
-        else:
-            print(f"[CLAUDE] Error: {self.log_dir} is not a file or directory.")
+        files = self._discover_jsonl_files("CLAUDE", self.log_dir)
+        if files is None:
             return []
         
         request_final_usages = {}
@@ -130,7 +110,7 @@ class ClaudeParser(BaseParser):
         resolved_filepath = str(file_path.resolve())
         session_id = resolved_filepath
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
             for source_line, line in enumerate(f, start=1):
                 if not line.strip():
                     continue
@@ -223,7 +203,7 @@ class ClaudeParser(BaseParser):
 
                 request_id = optional_identity(raw_request_id)
 
-                model = self._extract_model(data)
+                model = optional_identity(raw_model) or "UNKNOWN_MODEL"
                 costs = calculate_cost(
                     PRICING,
                     model,

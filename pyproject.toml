@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "burnrate"
@@ -10,3 +11,6 @@ requires-python = ">=3.9"
 
 [project.scripts]
 burnrate = "burnrate.main:run"
+
+[tool.setuptools.packages.find]
+include = ["burnrate*"]

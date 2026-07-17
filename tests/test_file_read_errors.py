@@ -118,6 +118,118 @@ class TestFileReadErrors(unittest.TestCase):
                     self.assertFalse(parser.scan_incomplete)
                     self.assertEqual(parser.file_read_errors, [])
 
+    def test_bom_and_plain_utf8_preserve_first_record_and_diagnostics(self):
+        for parser_class in self.parser_classes:
+            for encoding in ("utf-8", "utf-8-sig"):
+                for scan_mode in ("file", "directory"):
+                    with self.subTest(
+                        parser=parser_class.__name__,
+                        encoding=encoding,
+                        scan_mode=scan_mode,
+                    ):
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            path = root / "usage.jsonl"
+                            record = self._valid_record(parser_class, 10)
+                            path.write_text(
+                                f"{json.dumps(record)}\nnot JSON\n",
+                                encoding=encoding,
+                            )
+                            log_path = path if scan_mode == "file" else root
+                            parser = parser_class(log_path=str(log_path))
+
+                            runs = parser.parse()
+
+                            self.assertEqual(len(runs), 1)
+                            self.assertEqual(parser.total_tokens, 10)
+                            self.assertEqual(
+                                parser.skip_counts["malformed_json"], 1
+                            )
+                            self.assertFalse(parser.scan_incomplete)
+                            self.assertEqual(parser.file_read_errors, [])
+
+    def test_missing_and_uninspectable_input_paths_are_distinct_from_scans(self):
+        for parser_class in self.parser_classes:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for scenario in ("missing", "inaccessible"):
+                    with self.subTest(parser=parser_class.__name__, scenario=scenario):
+                        path = root / f"{scenario}.jsonl"
+                        parser = parser_class(log_path=str(path))
+                        stat_patch = (
+                            patch.object(
+                                type(path),
+                                "stat",
+                                side_effect=PermissionError("access denied"),
+                            )
+                            if scenario == "inaccessible"
+                            else None
+                        )
+
+                        with patch("sys.stdout", new=StringIO()) as output:
+                            if stat_patch is None:
+                                runs = parser.parse()
+                            else:
+                                with stat_patch:
+                                    runs = parser.parse()
+
+                        self.assertEqual(runs, [])
+                        self.assertTrue(parser.invalid_input_path)
+                        self.assertFalse(parser.scan_incomplete)
+                        self.assertEqual(output.getvalue().count("Could not inspect"), 1)
+                        self.assertIn(str(path), output.getvalue())
+
+    def test_empty_directory_is_a_complete_scan(self):
+        for parser_class in self.parser_classes:
+            with self.subTest(parser=parser_class.__name__):
+                with tempfile.TemporaryDirectory() as directory:
+                    parser = parser_class(log_path=directory)
+
+                    self.assertEqual(parser.parse(), [])
+                    self.assertFalse(parser.invalid_input_path)
+                    self.assertFalse(parser.scan_incomplete)
+
+    def test_discovery_error_preserves_files_and_resets_on_next_parse(self):
+        for parser_class in self.parser_classes:
+            with self.subTest(parser=parser_class.__name__):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    first_dir = root / "first"
+                    restricted = root / "restricted"
+                    second_dir = root / "second"
+                    for path in (first_dir, restricted, second_dir):
+                        path.mkdir()
+                    first = first_dir / "usage.jsonl"
+                    second = second_dir / "usage.jsonl"
+                    self._write_record(first, self._valid_record(parser_class, 10))
+                    self._write_record(second, self._valid_record(parser_class, 20))
+
+                    def partial_walk(*args, onerror, **kwargs):
+                        yield str(first_dir), [], [first.name]
+                        error = PermissionError(13, "access denied", str(restricted))
+                        onerror(error)
+                        yield str(second_dir), [], [second.name]
+
+                    parser = parser_class(log_path=str(root))
+                    with patch(
+                        "burnrate.parsers.base.os.walk",
+                        side_effect=partial_walk,
+                    ):
+                        with patch("sys.stdout", new=StringIO()) as output:
+                            runs = parser.parse()
+
+                    self.assertEqual(len(runs), 2)
+                    self.assertEqual(parser.total_tokens, 30)
+                    self.assertFalse(parser.invalid_input_path)
+                    self.assertTrue(parser.scan_incomplete)
+                    self.assertEqual(parser.file_read_errors, [])
+                    self.assertEqual(output.getvalue().count("Could not scan"), 1)
+                    self.assertIn(str(restricted), output.getvalue())
+
+                    self.assertEqual(len(parser.parse()), 2)
+                    self.assertFalse(parser.invalid_input_path)
+                    self.assertFalse(parser.scan_incomplete)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,16 +45,8 @@ class CodexParser(BaseParser):
         self.unknown_models.clear()
         self._reset_diagnostics()
 
-        if not self.log_dir.exists():
-            print(f"[CODEX] Error: Directory {self.log_dir} not found.")
-            return []
-
-        if self.log_dir.is_file():
-            files = [self.log_dir]
-        elif self.log_dir.is_dir():
-            files = sorted(self.log_dir.glob("**/*.jsonl"))
-        else:
-            print(f"[CODEX] Error: {self.log_dir} is not a file or directory.")
+        files = self._discover_jsonl_files("CODEX", self.log_dir)
+        if files is None:
             return []
 
         # Scope known requests to sessions and preserve unknown requests by source.
@@ -109,7 +101,7 @@ class CodexParser(BaseParser):
         current_model = "UNKNOWN_MODEL"
         session_id = resolved_filepath
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
             for source_line, line in enumerate(f, start=1):
                 if not line.strip():
                     continue
@@ -140,7 +132,7 @@ class CodexParser(BaseParser):
                     continue
 
                 # Expected non-usage records are filtered without diagnostics.
-                if msg_type == "response_item" or msg_type != "event_msg":
+                if msg_type != "event_msg":
                     continue
 
                 payload = data.get("payload")
