@@ -1,4 +1,5 @@
 import json
+import shutil
 import unittest
 from unittest.mock import patch
 from io import StringIO
@@ -17,9 +18,7 @@ class TestClaudeParser(unittest.TestCase):
 
     def tearDown(self):
         # Clean up: remove all mock log files and the temporary directory after each test.
-        for f in self.test_dir.glob("*.jsonl"):
-            f.unlink()
-        self.test_dir.rmdir()
+        shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _create_mock_log(self, filename: Path, data: list):
         """Helper method to write mock JSONL data to a specified file.
@@ -29,6 +28,7 @@ class TestClaudeParser(unittest.TestCase):
             data (list): A list of dictionaries, where each dictionary represents
                          a JSON log entry to be written as a line in the file.
         """
+        filename.parent.mkdir(parents=True, exist_ok=True)
         with open(filename, 'w', encoding='utf-8') as f:
             for entry in data:
                 f.write(json.dumps(entry) + "\n")
@@ -209,30 +209,6 @@ class TestClaudeParser(unittest.TestCase):
 
         self.assertEqual(len(runs), 2)
         self.assertEqual(parser.total_tokens, 340)
-        self.assertEqual(
-            {(run["session_id"], run["request_id"]) for run in runs},
-            {("session-a", "shared-request"), ("session-b", "shared-request")},
-        )
-
-    def test_filename_scopes_request_id_when_session_metadata_is_missing(self):
-        """Claude falls back to each source filename for session identity."""
-        for filename, input_tokens in [("session-a.jsonl", 100), ("session-b.jsonl", 200)]:
-            self._create_mock_log(self.test_dir / filename, [{
-                "type": "assistant",
-                "requestId": "shared-request",
-                "timestamp": "2026-05-25T20:00:00Z",
-                "message": {
-                    "model": "claude-sonnet-4-5-20250929",
-                    "usage": {
-                        "input_tokens": input_tokens,
-                        "output_tokens": 20,
-                    },
-                },
-            }])
-
-        runs = ClaudeParser(log_path=str(self.test_dir)).parse()
-
-        self.assertEqual(len(runs), 2)
         self.assertEqual(
             {(run["session_id"], run["request_id"]) for run in runs},
             {("session-a", "shared-request"), ("session-b", "shared-request")},

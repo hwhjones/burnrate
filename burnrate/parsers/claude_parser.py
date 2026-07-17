@@ -3,7 +3,12 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
-from .base import BaseParser, parse_timestamp_date
+from .base import (
+    BaseParser,
+    invalid_optional_identity,
+    optional_identity,
+    parse_timestamp_date,
+)
 from ..pricing import CLAUDE_PRICING, calculate_cost
 
 # Backward-compatible alias for existing imports.
@@ -28,21 +33,12 @@ class ClaudeParser(BaseParser):
         self.unknown_models = set()
         self._reset_diagnostics()
 
-    def _extract_session_id(self, file_path: Path) -> str:
-        """Construct a session identifier from a log file name."""
-        stem = file_path.stem
-        parts = stem.split("-")
-        if len(parts) >= 5:
-            # Use the trailing five components when the filename is long.
-            return "-".join(parts[-5:])
-        return stem
-
     def _extract_model(self, data: dict) -> str:
         """Extract the used model name from a log record."""
         message = data.get("message")
         if not isinstance(message, Mapping):
-            return "claude"
-        return message.get("model") or "claude"
+            return "UNKNOWN_MODEL"
+        return optional_identity(message.get("model")) or "UNKNOWN_MODEL"
 
     def _extract_usage(self, data: dict) -> dict:
         """Normalize the usage payload from different Claude record shapes."""
@@ -131,8 +127,8 @@ class ClaudeParser(BaseParser):
         if not file_path.is_file():
             return
 
-        session_id = self._extract_session_id(file_path)
         resolved_filepath = str(file_path.resolve())
+        session_id = resolved_filepath
 
         with open(file_path, 'r', encoding='utf-8') as f:
             for source_line, line in enumerate(f, start=1):
@@ -151,13 +147,21 @@ class ClaudeParser(BaseParser):
                 if data.get("type") != "assistant": # Only process assistant messages for usage
                     continue
 
+                message = data.get("message")
+                if (
+                    "message" in data
+                    and message is not None
+                    and not isinstance(message, Mapping)
+                ):
+                    self._record_skip("invalid_record_shape", usage_like=True)
+                    continue
+
                 if "usage" in data:
                     usage = data["usage"]
                     if not isinstance(usage, Mapping):
                         self._record_skip("invalid_record_shape", usage_like=True)
                         continue
                 else:
-                    message = data.get("message")
                     if not isinstance(message, Mapping):
                         self._record_skip("invalid_record_shape", usage_like=True)
                         continue
@@ -203,9 +207,21 @@ class ClaudeParser(BaseParser):
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
-                request_id = data.get("requestId")
-                if not request_id:
-                    request_id = None
+                raw_model = message.get("model") if isinstance(message, Mapping) else None
+                raw_request_id = data.get("requestId")
+                raw_primary_session = data.get("sessionId")
+                raw_secondary_session = data.get("session_id")
+                identity_values = (
+                    raw_model,
+                    raw_request_id,
+                    raw_primary_session,
+                    raw_secondary_session,
+                )
+                if any(invalid_optional_identity(value) for value in identity_values):
+                    self._record_skip("invalid_record_shape", usage_like=True)
+                    continue
+
+                request_id = optional_identity(raw_request_id)
 
                 model = self._extract_model(data)
                 costs = calculate_cost(
@@ -217,9 +233,12 @@ class ClaudeParser(BaseParser):
                     cache_write_tokens=cache_create,
                 )
                 
-                sid = data.get("sessionId") or data.get("session_id") or session_id
-                if sid:
-                    self.sessions.add(sid) # Track unique session IDs
+                sid = (
+                    optional_identity(raw_primary_session)
+                    or optional_identity(raw_secondary_session)
+                    or session_id
+                )
+                self.sessions.add(sid) # Track unique session IDs
                 entry = {
                     "session_id": sid,
                     "request_id": request_id,

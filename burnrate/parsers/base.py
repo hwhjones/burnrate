@@ -11,6 +11,16 @@ SKIP_CATEGORIES = (
 )
 
 
+def invalid_optional_identity(value) -> bool:
+    """Return whether a supplied optional identity is not a string."""
+    return value is not None and not isinstance(value, str)
+
+
+def optional_identity(value) -> Optional[str]:
+    """Return a non-empty string identity, or None for a missing value."""
+    return value if isinstance(value, str) and value else None
+
+
 def parse_timestamp_date(timestamp) -> Optional[calendar_date]:
     """Return the calendar date for a valid ISO timestamp, otherwise None."""
     if not isinstance(timestamp, str) or not timestamp.strip():

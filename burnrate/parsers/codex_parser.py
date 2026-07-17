@@ -3,7 +3,12 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
-from .base import BaseParser, parse_timestamp_date
+from .base import (
+    BaseParser,
+    invalid_optional_identity,
+    optional_identity,
+    parse_timestamp_date,
+)
 from ..pricing import CODEX_PRICING, calculate_cost
 
 # Backward-compatible alias for existing imports.
@@ -25,13 +30,6 @@ class CodexParser(BaseParser):
         self.stats_by_folder = {}
         self.unknown_models = set()
         self._reset_diagnostics()
-
-    def _extract_session_id(self, file_path: Path) -> str:
-        stem = file_path.stem
-        parts = stem.split("-")
-        if len(parts) >= 5:
-            return "-".join(parts[-5:])
-        return stem
 
     def parse(self) -> list[dict]:
         """Parse Codex logs into individual usage entries and aggregate totals."""
@@ -107,9 +105,9 @@ class CodexParser(BaseParser):
         if not file_path.is_file():
             return
 
-        current_model = "UNKNOWN_MODEL"
-        session_id = self._extract_session_id(file_path)
         resolved_filepath = str(file_path.resolve())
+        current_model = "UNKNOWN_MODEL"
+        session_id = resolved_filepath
 
         with open(file_path, 'r', encoding='utf-8') as f:
             for source_line, line in enumerate(f, start=1):
@@ -132,8 +130,12 @@ class CodexParser(BaseParser):
                     if not isinstance(payload, Mapping):
                         self._record_skip("invalid_record_shape")
                         continue
-                    context_model = payload.get("model")
-                    if context_model:
+                    raw_context_model = payload.get("model")
+                    if invalid_optional_identity(raw_context_model):
+                        self._record_skip("invalid_record_shape")
+                        continue
+                    context_model = optional_identity(raw_context_model)
+                    if context_model is not None:
                         current_model = context_model
                     continue
 
@@ -184,24 +186,61 @@ class CodexParser(BaseParser):
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
-                model = info.get("model") or current_model
-
-                sid = data.get("session_id") or payload.get("session_id") or session_id
-                if sid:
-                    self.sessions.add(sid)
+                supplied_total = usage.get("total_tokens")
+                if "total_tokens" in usage and (
+                    isinstance(supplied_total, bool)
+                    or not isinstance(supplied_total, int)
+                    or supplied_total < 0
+                ):
+                    self._record_skip("unusable_usage_record", usage_like=True)
+                    continue
 
                 gross_input = token_values["input_tokens"]
                 cache_read = token_values["cached_input_tokens"]
-                input_tokens = max(0, gross_input - cache_read) # Net input
                 output_tokens = token_values["output_tokens"]
                 reasoning = token_values["reasoning_output_tokens"]
+                if (
+                    cache_read > gross_input
+                    or reasoning > output_tokens
+                    or (
+                        "total_tokens" in usage
+                        and supplied_total != gross_input + output_tokens
+                    )
+                ):
+                    self._record_skip("unusable_usage_record", usage_like=True)
+                    continue
+
+                raw_model = info.get("model")
+                raw_data_session = data.get("session_id")
+                raw_payload_session = payload.get("session_id")
+                raw_request_id = data.get("requestId")
+                identity_values = (
+                    raw_model,
+                    raw_data_session,
+                    raw_payload_session,
+                    raw_request_id,
+                )
+                if any(invalid_optional_identity(value) for value in identity_values):
+                    self._record_skip("invalid_record_shape", usage_like=True)
+                    continue
+
+                model = optional_identity(raw_model) or current_model
+
+                sid = (
+                    optional_identity(raw_data_session)
+                    or optional_identity(raw_payload_session)
+                    or session_id
+                )
+                self.sessions.add(sid)
+
+                input_tokens = gross_input - cache_read # Net input
                 total_tokens = input_tokens + output_tokens + cache_read
 
                 if total_tokens == 0:
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
-                request_id = data.get("requestId") or None
+                request_id = optional_identity(raw_request_id)
                 costs = calculate_cost(
                     PRICING,
                     model,

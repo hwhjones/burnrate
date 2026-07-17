@@ -122,50 +122,84 @@ Dependencies: H6.
 
 ### H9 - Validate cross-field token invariants
 
-- [ ] Reject Codex usage records where `cached_input_tokens` exceeds
+- [x] Reject Codex usage records where `cached_input_tokens` exceeds
   `input_tokens`; do not hide the inconsistency with clamping.
-- [ ] Reject records where supplied `reasoning_output_tokens` exceeds
+- [x] Reject records where supplied `reasoning_output_tokens` exceeds
   `output_tokens`.
-- [ ] When `total_tokens` is supplied, require it to equal `input_tokens` plus
+- [x] When `total_tokens` is supplied, require it to equal `input_tokens` plus
   `output_tokens`; continue to allow the field to be absent.
-- [ ] Record rejected values as unusable usage and mark totals as potentially
+- [x] Record rejected values as unusable usage and mark totals as potentially
   incomplete through the existing H6 diagnostics.
-- [ ] Preserve valid lower, equal, absent, and zero values for every invariant.
-- [ ] Test each boundary and mismatch for known and unknown models.
+- [x] Preserve valid lower, equal, absent, and zero values for every invariant.
+- [x] Test each boundary and mismatch for known and unknown models.
 
 Dependencies: H6 and H7.
 
 ### H10 - Validate model and identity metadata
 
-- [ ] Accept non-empty string values for model, session ID, and request ID
+- [x] Accept non-empty string values for model, session ID, and request ID
   fields before using them in pricing lookups, sets, or dictionary keys.
-- [ ] Treat absent, `null`, and empty identity values as missing and use the
+- [x] Treat absent, `null`, and empty identity values as missing and use the
   existing deterministic fallbacks.
-- [ ] Preserve missing-model behavior as `UNKNOWN_MODEL` and unpriced.
-- [ ] Reject supplied booleans, numbers, lists, and mappings as invalid record
+- [x] Preserve missing-model behavior as `UNKNOWN_MODEL` and unpriced.
+- [x] Reject supplied booleans, numbers, lists, and mappings as invalid record
   shapes; do not stringify or otherwise coerce them.
-- [ ] Validate Codex `turn_context.model`, `info.model`, session IDs, and
+- [x] Validate Codex `turn_context.model`, `info.model`, session IDs, and
   request IDs, plus the corresponding Claude message and top-level fields.
-- [ ] Mark rejected usage-like records as potentially incomplete through H6
+- [x] Mark rejected usage-like records as potentially incomplete through H6
   and continue parsing later records.
-- [ ] Test every invalid type, missing and empty values, and valid strings for
+- [x] Test every invalid type, missing and empty values, and valid strings for
   both parsers.
 
 Dependencies: H6 and H7.
 
 ### H11 - Make fallback session identities path-unique
 
-- [ ] Use the resolved source filepath, not only the filename stem, when
+- [x] Use the resolved source filepath, not only the filename stem, when
   explicit session metadata is absent.
-- [ ] Preserve valid explicit session metadata unchanged.
-- [ ] Keep returned fallback `session_id` values deterministic and
+- [x] Preserve valid explicit session metadata unchanged.
+- [x] Keep returned fallback `session_id` values deterministic and
   string-valued.
-- [ ] Retain identical request IDs from files with the same basename in
+- [x] Retain identical request IDs from files with the same basename in
   different directories while preserving deduplication within one file.
-- [ ] Add recursive-directory fixtures for both parsers and update existing
+- [x] Add recursive-directory fixtures for both parsers and update existing
   filename-fallback assertions.
 
 Dependencies: H3, H4, and H10.
+
+### H12 - Consolidate hardening test coverage
+
+- [x] Inventory the behavioral assertions added for H9 through H11 before
+  refactoring, and preserve a direct test for every accepted value, rejected
+  value, fallback, diagnostic, continuation, and deduplication contract.
+- [x] Replace the duplicated Codex and Claude identity-type tests with one
+  table-driven contract test using provider-specific record builders and
+  `subTest` labels for provider, field, and invalid value.
+- [x] Replace the duplicated missing, `null`, empty, and valid identity tests
+  with one table-driven contract test while retaining explicit assertions for
+  `UNKNOWN_MODEL`, unpriced usage, session precedence, request fallback, and
+  string-valued session IDs.
+- [x] Fold supplied `total_tokens` type cases into the existing Codex strict
+  token-value test, while keeping cross-field arithmetic invariants in a
+  separate focused test.
+- [x] Remove the older distinct-basename fallback tests once the recursive
+  same-basename fixtures cover resolved-path fallback, cross-directory
+  retention, and within-file request deduplication for both parsers.
+- [x] Share recursive fixture construction where it improves readability, but
+  retain separately named Codex and Claude test entry points so failures remain
+  provider-specific.
+- [x] Do not change parser behavior, diagnostics, result schemas, or public
+  interfaces as part of this refactor; production-code cleanup requires a
+  separate reviewed item.
+- [x] Record before-and-after test line counts, require a material reduction in
+  duplicated setup and assertions without introducing opaque test helpers, and
+  run the complete test suite plus `git diff --check`.
+
+Dependencies: H9, H10, and H11.
+
+Result: the three affected test files decreased from 1,614 to 1,520 lines
+(-94, 5.8%) while retaining the H9-H11 behavioral contracts. The full suite
+passes with 59 tests.
 
 ## Medium priority v0.1.1
 
