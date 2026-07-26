@@ -14,7 +14,6 @@ from ..pricing import CODEX_PRICING, calculate_cost
 # Backward-compatible alias for existing imports.
 PRICING = CODEX_PRICING
 
-
 class CodexParser(BaseParser):
     """Parser implementation for Codex-style JSONL session logs."""
 
@@ -68,18 +67,19 @@ class CodexParser(BaseParser):
             else:
                 self.unknown_models.add(entry["model"])
             self.models_used.add(entry["model"])
-
+            
             # Aggregate cache read tokens and their costs.
             if entry["cache_read_tokens"] > 0:
                 self.total_cache_read += entry["cache_read_tokens"]
                 self.total_cache_read_cost += entry["c_read_cost"]
+            
 
             self.total_reasoning_tokens += entry["reasoning_tokens"]
-
+            
             folder = Path(entry["filepath"]).parent.name
             if folder not in self.stats_by_folder:
                 self.stats_by_folder[folder] = {"runs": 0, "tokens": 0, "cost": 0.0}
-
+            
             self.stats_by_folder[folder]["runs"] += 1
             self.stats_by_folder[folder]["tokens"] += entry["total_tokens"]
             self.stats_by_folder[folder]["cost"] += entry["cost"] or 0.0
@@ -101,7 +101,7 @@ class CodexParser(BaseParser):
         current_model = "UNKNOWN_MODEL"
         session_id = resolved_filepath
 
-        with open(file_path, "r", encoding="utf-8-sig") as f:
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
             for source_line, line in enumerate(f, start=1):
                 if not line.strip():
                     continue
@@ -225,7 +225,7 @@ class CodexParser(BaseParser):
                 )
                 self.sessions.add(sid)
 
-                input_tokens = gross_input - cache_read  # Net input
+                input_tokens = gross_input - cache_read # Net input
                 total_tokens = input_tokens + output_tokens + cache_read
 
                 if total_tokens == 0:
@@ -242,19 +242,19 @@ class CodexParser(BaseParser):
                 )
 
                 entry = {
-                    "session_id": sid,
-                    "request_id": request_id,
-                    "timestamp": data.get("timestamp"),
-                    "input_tokens": input_tokens,
-                    "model": model,
-                    "output_tokens": output_tokens,
-                    "reasoning_tokens": reasoning,
-                    "total_tokens": total_tokens,
-                    "cache_read_tokens": cache_read,
-                    "cost": costs["total"] if costs else None,
-                    "c_read_cost": costs["cache_read"] if costs else 0.0,
-                    "filepath": resolved_filepath,
-                    "source_line": source_line,
+                        "session_id": sid,
+                        "request_id": request_id,
+                        "timestamp": data.get("timestamp"),
+                        "input_tokens": input_tokens,
+                        "model": model,
+                        "output_tokens": output_tokens,
+                        "reasoning_tokens": reasoning,
+                        "total_tokens": total_tokens,
+                        "cache_read_tokens": cache_read,
+                        "cost": costs["total"] if costs else None,
+                        "c_read_cost": costs["cache_read"] if costs else 0.0,
+                        "filepath": resolved_filepath,
+                        "source_line": source_line,
                 }
                 parsed_timestamp = None
                 timestamp = entry["timestamp"]
@@ -268,19 +268,22 @@ class CodexParser(BaseParser):
                                 tzinfo=timezone.utc
                             )
                         else:
-                            parsed_timestamp = parsed_timestamp.astimezone(timezone.utc)
+                            parsed_timestamp = parsed_timestamp.astimezone(
+                                timezone.utc
+                            )
                     except ValueError:
                         pass
                 selection_order = (
-                    parsed_timestamp is not None,
-                    parsed_timestamp or datetime.min.replace(tzinfo=timezone.utc),
-                    resolved_filepath,
-                    source_line,
+                        parsed_timestamp is not None,
+                        parsed_timestamp
+                        or datetime.min.replace(tzinfo=timezone.utc),
+                        resolved_filepath,
+                        source_line,
                 )
                 identity = (
-                    (sid, request_id)
-                    if request_id is not None
-                    else (sid, resolved_filepath, source_line)
+                        (sid, request_id)
+                        if request_id is not None
+                        else (sid, resolved_filepath, source_line)
                 )
                 existing = request_final_usages.get(identity)
                 if existing is None or selection_order > existing[0]:
@@ -288,30 +291,26 @@ class CodexParser(BaseParser):
 
     def summary(self):
         """Print a summary of the parsed Codex log analysis."""
-        print("\n[CODEX] =========================")
+        print(f"\n[CODEX] =========================")
         print(f"[CODEX] LOG ANALYSIS: {self.log_dir}")
-        print("[CODEX] =========================")
+        print(f"[CODEX] =========================")
         self._print_diagnostics("CODEX")
 
         if not self.runs:
             print("[CODEX] No runs found to summarize.")
-            print("[CODEX] =========================")
+            print(f"[CODEX] =========================")
             return
 
         # Group runs by date and model
         # Using defaultdict to simplify aggregation
-        grouped_stats = defaultdict(
-            lambda: defaultdict(
-                lambda: {
-                    "input": 0,
-                    "output": 0,
-                    "reasoning": 0,
-                    "cache_read": 0,
-                    "cost": 0.0,
-                    "priced": True,
-                }
-            )
-        )
+        grouped_stats = defaultdict(lambda: defaultdict(lambda: {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cost": 0.0,
+            "priced": True,
+        }))
 
         dated_runs = []
         undated_runs = []
@@ -324,7 +323,7 @@ class CodexParser(BaseParser):
                 date = parsed_date.isoformat()
                 dated_runs.append((run, parsed_date))
             model = run.get("model", "UNKNOWN_MODEL")
-
+            
             grouped_stats[date][model]["input"] += run.get("input_tokens", 0)
             grouped_stats[date][model]["output"] += run.get("output_tokens", 0)
             grouped_stats[date][model]["reasoning"] += run.get("reasoning_tokens", 0)
@@ -335,12 +334,8 @@ class CodexParser(BaseParser):
                 grouped_stats[date][model]["cost"] += run["cost"]
 
         # Print table header
-        print(
-            f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Reasoning':>9} {'Cache Read':>10} {'API-equivalent USD':>18}"
-        )
-        print(
-            f"{'-' * 10} {'-' * 28} {'-' * 9} {'-' * 8} {'-' * 9} {'-' * 10} {'-' * 18}"
-        )
+        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Reasoning':>9} {'Cache Read':>10} {'API-equivalent USD':>18}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*18}")
 
         # Print grouped data
         total_input_agg = 0
@@ -357,9 +352,7 @@ class CodexParser(BaseParser):
                 reasoning_t = stats["reasoning"]
                 cache_r = stats["cache_read"]
                 cost_v = stats["cost"]
-                cost_display = (
-                    f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
-                )
+                cost_display = f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
 
                 total_input_agg += input_t
                 total_output_agg += output_t
@@ -367,24 +360,16 @@ class CodexParser(BaseParser):
                 total_cache_read_agg += cache_r
                 total_cost_agg += cost_v
 
-                print(
-                    f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {reasoning_t:>9,} {cache_r:>10,} {cost_display}"
-                )
+                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {reasoning_t:>9,} {cache_r:>10,} {cost_display}")
 
         # Print totals row
-        print(
-            f"{'-' * 10} {'-' * 28} {'-' * 9} {'-' * 8} {'-' * 9} {'-' * 10} {'-' * 18}"
-        )
-        print(
-            f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}"
-        )
-        print("[CODEX] =========================")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*18}")
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}")
+        print(f"[CODEX] =========================")
 
         # Additional metrics using the overall totals from parsing
         total_cached = self.total_cache_read
-        cache_percentage = (
-            (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
-        )
+        cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
         print(f"[CODEX] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
 
         if undated_runs:
@@ -402,9 +387,7 @@ class CodexParser(BaseParser):
             print("[CODEX] API-equivalent USD totals/projection: incomplete")
 
         if not dated_runs:
-            print(
-                "[CODEX] Projected 30-day API-equivalent USD: unavailable (no valid dated records)"
-            )
+            print("[CODEX] Projected 30-day API-equivalent USD: unavailable (no valid dated records)")
         elif not self.unknown_models:
             dates = [parsed_date for _, parsed_date in dated_runs]
             observed_days = (max(dates) - min(dates)).days + 1
@@ -415,13 +398,9 @@ class CodexParser(BaseParser):
             projected_30_day_cost = average_daily_cost * 30
 
             print(f"[CODEX] Observed period:                 {observed_days} day(s)")
-            print(
-                f"[CODEX] Average daily API-equivalent USD: ${average_daily_cost:.2f}"
-            )
-            print(
-                f"[CODEX] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}"
-            )
+            print(f"[CODEX] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
+            print(f"[CODEX] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
 
         print("[CODEX] Estimates are not provider invoices.")
         print("[CODEX] BurnRate does not calculate Codex credit use.")
-        print("[CODEX] =========================")
+        print(f"[CODEX] =========================")

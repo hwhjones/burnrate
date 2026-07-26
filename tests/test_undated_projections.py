@@ -27,7 +27,9 @@ class TestUndatedProjections(unittest.TestCase):
         parser.total_tokens = sum(
             run["input_tokens"] + run["output_tokens"] for run in runs
         )
-        parser.total_cost = sum(run["cost"] for run in runs if run["cost"] is not None)
+        parser.total_cost = sum(
+            run["cost"] for run in runs if run["cost"] is not None
+        )
         if any(run["cost"] is None for run in runs):
             parser.unknown_models = {"unpriced-model"}
         with patch("sys.stdout", new=StringIO()) as output:

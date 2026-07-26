@@ -237,13 +237,9 @@ class TestParserValidation(unittest.TestCase):
 
     def test_identity_metadata_types_are_strictly_validated(self):
         invalid_values = (True, 7, 7.5, [], {})
-        for (
-            provider,
-            parser_class,
-            factory,
-            known_model,
-            fields,
-        ) in self._identity_contracts():
+        for provider, parser_class, factory, known_model, fields in (
+            self._identity_contracts()
+        ):
             for field, path in fields:
                 for value in invalid_values:
                     with self.subTest(provider=provider, field=field, value=value):
@@ -256,7 +252,9 @@ class TestParserValidation(unittest.TestCase):
 
                         self.assertEqual(len(runs), 1)
                         self.assertEqual(runs[0]["model"], known_model)
-                        self.assertEqual(parser.skip_counts["invalid_record_shape"], 1)
+                        self.assertEqual(
+                            parser.skip_counts["invalid_record_shape"], 1
+                        )
                         self.assertEqual(parser.rejected_usage_records, 1)
                         self.assertTrue(parser.totals_potentially_incomplete)
 
@@ -291,13 +289,9 @@ class TestParserValidation(unittest.TestCase):
             "secondary_session": "secondary-session",
             "request": "request-1",
         }
-        for (
-            provider,
-            parser_class,
-            factory,
-            known_model,
-            fields,
-        ) in self._identity_contracts():
+        for provider, parser_class, factory, known_model, fields in (
+            self._identity_contracts()
+        ):
             with self.subTest(provider=provider):
                 absent = factory({"input_tokens": 10})
                 self._delete_path(absent, fields[0][1])
@@ -310,7 +304,7 @@ class TestParserValidation(unittest.TestCase):
 
                 valid = factory({"input_tokens": 10})
                 valid_values["model"] = known_model
-                for field, path in fields:
+                for (field, path) in fields:
                     self._set_path(valid, path, valid_values[field])
                 records.append(valid)
 
@@ -359,7 +353,9 @@ class TestParserValidation(unittest.TestCase):
                 {str(path.resolve()) for path in paths},
             )
             self.assertTrue(all(run["session_id"] == run["filepath"] for run in runs))
-            self.assertTrue(all(run["request_id"] == "shared-request" for run in runs))
+            self.assertTrue(
+                all(run["request_id"] == "shared-request" for run in runs)
+            )
 
     def test_codex_fallback_session_contract(self):
         self._assert_path_unique_fallback(self._identity_contracts()[0])
@@ -403,7 +399,6 @@ class TestParserValidation(unittest.TestCase):
         self.assertEqual(runs[1]["cache_creation_tokens"], 0)
         self.assertEqual(parser.skip_counts["unusable_usage_record"], 24)
         self.assertEqual(parser.rejected_usage_records, 24)
-
 
 if __name__ == "__main__":
     unittest.main()

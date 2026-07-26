@@ -1,4 +1,4 @@
-import json
+﻿import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,12 +13,10 @@ from ..pricing import CLAUDE_PRICING, calculate_cost
 
 # Backward-compatible alias for existing imports.
 PRICING = CLAUDE_PRICING
-
-
 class ClaudeParser(BaseParser):
     """Parser implementation for Anthropic Claude JSONL session logs."""
 
-    def __init__(self, log_path: str = "~/.claude/projects/") -> None:
+    def __init__(self, log_path: str = '~/.claude/projects/') -> None:
         # Convert the provided path to an absolute home-expanded Path object.
         self.log_dir = Path(log_path).expanduser()
         self.runs = []
@@ -54,7 +52,7 @@ class ClaudeParser(BaseParser):
         files = self._discover_jsonl_files("CLAUDE", self.log_dir)
         if files is None:
             return []
-
+        
         request_final_usages = {}
 
         for file_path in files:
@@ -70,7 +68,7 @@ class ClaudeParser(BaseParser):
                 self.total_cost += entry["cost"]
             else:
                 self.unknown_models.add(entry["model"])
-
+            
             # Aggregate cache read tokens and their costs.
             if entry["cache_read_tokens"] > 0:
                 self.total_cache_read += entry["cache_read_tokens"]
@@ -82,12 +80,12 @@ class ClaudeParser(BaseParser):
                 self.total_cache_creation_cost += entry["c_create_cost"]
 
             self.models_used.add(entry["model"])
-
+            
             # Update stats_by_folder using the filepath from the final entry
             folder = Path(entry["filepath"]).parent.name
             # Ensure folder is initialized, though it should be from the first loop
             if folder not in self.stats_by_folder:
-                self.stats_by_folder[folder] = {"runs": 0, "tokens": 0, "cost": 0.0}
+                 self.stats_by_folder[folder] = {"runs": 0, "tokens": 0, "cost": 0.0}
             self.stats_by_folder[folder]["runs"] += 1
             self.stats_by_folder[folder]["tokens"] += entry["total_tokens"]
             self.stats_by_folder[folder]["cost"] += entry["cost"] or 0.0
@@ -112,7 +110,7 @@ class ClaudeParser(BaseParser):
         resolved_filepath = str(file_path.resolve())
         session_id = resolved_filepath
 
-        with open(file_path, "r", encoding="utf-8-sig") as f:
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
             for source_line, line in enumerate(f, start=1):
                 if not line.strip():
                     continue
@@ -126,9 +124,7 @@ class ClaudeParser(BaseParser):
                     self._record_skip("non_object_json")
                     continue
 
-                if (
-                    data.get("type") != "assistant"
-                ):  # Only process assistant messages for usage
+                if data.get("type") != "assistant": # Only process assistant messages for usage
                     continue
 
                 message = data.get("message")
@@ -187,13 +183,11 @@ class ClaudeParser(BaseParser):
                 cache_create = token_values["cache_creation_input_tokens"]
                 total_tokens = input_tokens + cache_create + cache_read + output_tokens
 
-                if total_tokens == 0:  # Skip if no tokens were used
+                if total_tokens == 0: # Skip if no tokens were used
                     self._record_skip("unusable_usage_record", usage_like=True)
                     continue
 
-                raw_model = (
-                    message.get("model") if isinstance(message, Mapping) else None
-                )
+                raw_model = message.get("model") if isinstance(message, Mapping) else None
                 raw_request_id = data.get("requestId")
                 raw_primary_session = data.get("sessionId")
                 raw_secondary_session = data.get("session_id")
@@ -218,13 +212,13 @@ class ClaudeParser(BaseParser):
                     cache_read_tokens=cache_read,
                     cache_write_tokens=cache_create,
                 )
-
+                
                 sid = (
                     optional_identity(raw_primary_session)
                     or optional_identity(raw_secondary_session)
                     or session_id
                 )
-                self.sessions.add(sid)  # Track unique session IDs
+                self.sessions.add(sid) # Track unique session IDs
                 entry = {
                     "session_id": sid,
                     "request_id": request_id,
@@ -253,7 +247,9 @@ class ClaudeParser(BaseParser):
                                 tzinfo=timezone.utc
                             )
                         else:
-                            parsed_timestamp = parsed_timestamp.astimezone(timezone.utc)
+                            parsed_timestamp = parsed_timestamp.astimezone(
+                                timezone.utc
+                            )
                     except ValueError:
                         pass
                 selection_order = (
@@ -273,30 +269,26 @@ class ClaudeParser(BaseParser):
 
     def summary(self) -> None:
         """Print a summary of the parsed Claude log analysis."""
-        print("\n[CLAUDE] =========================")
+        print(f"\n[CLAUDE] =========================")
         print(f"[CLAUDE] LOG ANALYSIS: {self.log_dir}")
-        print("[CLAUDE] =========================")
+        print(f"[CLAUDE] =========================")
         self._print_diagnostics("CLAUDE")
 
         if not self.runs:
             print("[CLAUDE] No runs found to summarize.")
-            print("[CLAUDE] =========================")
+            print(f"[CLAUDE] =========================")
             return
 
         # Group runs by date and model
         # Using defaultdict to simplify aggregation
-        grouped_stats = defaultdict(
-            lambda: defaultdict(
-                lambda: {
-                    "input": 0,
-                    "output": 0,
-                    "cache_read": 0,
-                    "cache_creation": 0,  # Add cache creation to grouped stats
-                    "cost": 0.0,
-                    "priced": True,
-                }
-            )
-        )
+        grouped_stats = defaultdict(lambda: defaultdict(lambda: {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_creation": 0, # Add cache creation to grouped stats
+            "cost": 0.0,
+            "priced": True,
+        }))
 
         dated_runs = []
         undated_runs = []
@@ -315,27 +307,21 @@ class ClaudeParser(BaseParser):
             # Reasoning tokens are not tracked for Claude, so removed from aggregation
             # grouped_stats[date][model]["reasoning"] += run.get("reasoning_tokens", 0)
             grouped_stats[date][model]["cache_read"] += run.get("cache_read_tokens", 0)
-            grouped_stats[date][model]["cache_creation"] += run.get(
-                "cache_creation_tokens", 0
-            )  # Aggregate cache creation
+            grouped_stats[date][model]["cache_creation"] += run.get("cache_creation_tokens", 0) # Aggregate cache creation
             if run.get("cost") is None:
                 grouped_stats[date][model]["priced"] = False
             else:
                 grouped_stats[date][model]["cost"] += run["cost"]
 
         # Print table header
-        print(
-            f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Cache Create':>12} {'Cache Read':>10} {'API-equivalent USD':>18}"
-        )
-        print(
-            f"{'-' * 10} {'-' * 28} {'-' * 9} {'-' * 8} {'-' * 12} {'-' * 10} {'-' * 18}"
-        )
+        print(f"{'Date':<10} {'Model':<28} {'Input':>9} {'Output':>8} {'Cache Create':>12} {'Cache Read':>10} {'API-equivalent USD':>18}")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*18}")
 
         # Print grouped data
         total_input_agg = 0
         total_output_agg = 0
         total_cache_read_agg = 0
-        total_cache_creation_agg = 0  # Initialize aggregate for cache creation
+        total_cache_creation_agg = 0 # Initialize aggregate for cache creation
         total_cost_agg = 0.0
 
         for date in sorted(grouped_stats.keys()):
@@ -344,37 +330,27 @@ class ClaudeParser(BaseParser):
                 input_t = stats["input"]
                 output_t = stats["output"]
                 cache_r = stats["cache_read"]
-                cache_c = stats["cache_creation"]  # Get cache creation for current row
+                cache_c = stats["cache_creation"] # Get cache creation for current row
                 cost_v = stats["cost"]
-                cost_display = (
-                    f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
-                )
+                cost_display = f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
 
                 total_input_agg += input_t
                 total_output_agg += output_t
                 total_cache_read_agg += cache_r
-                total_cache_creation_agg += cache_c  # Aggregate cache creation
+                total_cache_creation_agg += cache_c # Aggregate cache creation
                 total_cost_agg += cost_v
 
-                print(
-                    f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {cache_c:>12,} {cache_r:>10,} {cost_display}"
-                )
+                print(f"{date:<10} {model:<28} {input_t:>9,} {output_t:>8,} {cache_c:>12,} {cache_r:>10,} {cost_display}")
 
         # Print totals row
-        print(
-            f"{'-' * 10} {'-' * 28} {'-' * 9} {'-' * 8} {'-' * 12} {'-' * 10} {'-' * 18}"
-        )
-        print(
-            f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_cache_creation_agg:>12,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}"
-        )
-        print("[CLAUDE] =========================")
+        print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*12} {'-'*10} {'-'*18}")
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_cache_creation_agg:>12,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}")
+        print(f"[CLAUDE] =========================")
 
         # Additional metrics using the overall totals from parsing
         # Total cached includes both read and write/creation for Claude
         total_cached = self.total_cache_read + self.total_cache_creation
-        cache_percentage = (
-            (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
-        )
+        cache_percentage = (total_cached / self.total_tokens * 100) if self.total_tokens > 0 else 0
         print(f"[CLAUDE] Cache tokens as % of all tokens: {cache_percentage:.2f}%")
 
         if undated_runs:
@@ -392,9 +368,7 @@ class ClaudeParser(BaseParser):
             print("[CLAUDE] API-equivalent USD totals/projection: incomplete")
 
         if not dated_runs:
-            print(
-                "[CLAUDE] Projected 30-day API-equivalent USD: unavailable (no valid dated records)"
-            )
+            print("[CLAUDE] Projected 30-day API-equivalent USD: unavailable (no valid dated records)")
         elif not self.unknown_models:
             dates = [parsed_date for _, parsed_date in dated_runs]
             observed_days = (max(dates) - min(dates)).days + 1
@@ -405,13 +379,9 @@ class ClaudeParser(BaseParser):
             projected_30_day_cost = average_daily_cost * 30
 
             print(f"[CLAUDE] Observed period:                 {observed_days} day(s)")
-            print(
-                f"[CLAUDE] Average daily API-equivalent USD: ${average_daily_cost:.2f}"
-            )
-            print(
-                f"[CLAUDE] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}"
-            )
+            print(f"[CLAUDE] Average daily API-equivalent USD: ${average_daily_cost:.2f}")
+            print(f"[CLAUDE] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
 
         print("[CLAUDE] Estimates are not provider invoices.")
         print("[CLAUDE] BurnRate does not calculate Codex credit use.")
-        print("[CLAUDE] =========================")
+        print(f"[CLAUDE] =========================")

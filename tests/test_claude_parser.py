@@ -10,6 +10,7 @@ from burnrate.parsers.claude_parser import ClaudeParser, PRICING
 
 
 class TestClaudeParser(unittest.TestCase):
+
     def setUp(self):
         self.test_dir = Path("mock_claude_logs")
         # Create a temporary directory for mock log files before each test.
@@ -28,7 +29,7 @@ class TestClaudeParser(unittest.TestCase):
                          a JSON log entry to be written as a line in the file.
         """
         filename.parent.mkdir(parents=True, exist_ok=True)
-        with open(filename, "w", encoding="utf-8") as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             for entry in data:
                 f.write(json.dumps(entry) + "\n")
 
@@ -86,21 +87,19 @@ class TestClaudeParser(unittest.TestCase):
         runs = parser.parse()
 
         self.assertEqual(len(runs), 1)
-        self.assertEqual(parser.total_tokens, 15)  # 10 input + 5 output
-        self.assertAlmostEqual(
-            parser.total_cost, 0.000003 * 10 + 0.000015 * 5
-        )  # Using sonnet pricing
+        self.assertEqual(parser.total_tokens, 15) # 10 input + 5 output
+        self.assertAlmostEqual(parser.total_cost, 0.000003 * 10 + 0.000015 * 5) # Using sonnet pricing
         self.assertEqual(parser.total_cache_read, 0)
         self.assertEqual(parser.total_cache_creation, 0)
 
-        with patch("sys.stdout", new=StringIO()) as fake_out:
+        with patch('sys.stdout', new=StringIO()) as fake_out:
             parser.summary()
             output = fake_out.getvalue()
             self.assertIn("TOTALS", output)
             # Check for individual components in the table output
-            self.assertIn("10", output)  # Input tokens
+            self.assertIn("10", output) # Input tokens
             self.assertIn("5", output)  # Output tokens
-            self.assertIn("0.00", output)  # Total cost
+            self.assertIn("0.00", output) # Total cost
             self.assertIn("API-equivalent USD", output)
             self.assertIn("Estimates are not provider invoices.", output)
             self.assertIn("does not calculate Codex credit use.", output)
@@ -132,7 +131,7 @@ class TestClaudeParser(unittest.TestCase):
             {
                 "type": "assistant",
                 "sessionId": "claude-session-123",
-                "requestId": "req_01_dedup",  # Same request ID
+                "requestId": "req_01_dedup", # Same request ID
                 "timestamp": "2026-05-25T20:01:00Z",
                 "message": {
                     "model": "claude-sonnet-4-5-20250929",
@@ -141,10 +140,10 @@ class TestClaudeParser(unittest.TestCase):
                     "role": "assistant",
                     "content": [{"type": "text", "text": "Here is the answer."}],
                     "usage": {
-                        "input_tokens": 15,  # Cumulative input
+                        "input_tokens": 15, # Cumulative input
                         "output_tokens": 8,  # Cumulative output
-                        "cache_creation_input_tokens": 120,  # Cumulative cache create
-                        "cache_read_input_tokens": 250,  # Cumulative cache read
+                        "cache_creation_input_tokens": 120, # Cumulative cache create
+                        "cache_read_input_tokens": 250, # Cumulative cache read
                     },
                 },
             },
@@ -155,7 +154,7 @@ class TestClaudeParser(unittest.TestCase):
         runs = parser.parse()
 
         # Assert that only one run is captured due to requestId de-duplication.
-        self.assertEqual(len(runs), 1)  # Only one unique request_id
+        self.assertEqual(len(runs), 1) # Only one unique request_id
         final_run = runs[0]
         # Assert the values of the final (cumulative) run.
         self.assertEqual(final_run["session_id"], "claude-session-123")
@@ -172,7 +171,7 @@ class TestClaudeParser(unittest.TestCase):
         self.assertEqual(parser.total_cache_creation, 120)
 
         # Patch stdout to capture the summary output for string assertions.
-        with patch("sys.stdout", new=StringIO()) as fake_out:
+        with patch('sys.stdout', new=StringIO()) as fake_out:
             parser.summary()
             output = fake_out.getvalue()
             self.assertIn("TOTALS", output)
@@ -181,30 +180,28 @@ class TestClaudeParser(unittest.TestCase):
             self.assertIn("8", output)
             self.assertIn("120", output)
             self.assertIn("250", output)
-            self.assertIn("94.15%", output)  # Cache percentage
-            self.assertIn("250", output)  # Cache Read
-            self.assertIn("120", output)  # Cache Create
+            self.assertIn("94.15%", output) # Cache percentage
+            self.assertIn("250", output) # Cache Read
+            self.assertIn("120", output) # Cache Create
 
     def test_same_request_id_in_different_sessions_is_retained(self):
         """Claude does not merge equal request IDs from distinct sessions."""
         test_filename = self.test_dir / "claude-sessions.jsonl"
         records = []
         for session_id, input_tokens in [("session-a", 100), ("session-b", 200)]:
-            records.append(
-                {
-                    "type": "assistant",
-                    "sessionId": session_id,
-                    "requestId": "shared-request",
-                    "timestamp": "2026-05-25T20:00:00Z",
-                    "message": {
-                        "model": "claude-sonnet-4-5-20250929",
-                        "usage": {
-                            "input_tokens": input_tokens,
-                            "output_tokens": 20,
-                        },
+            records.append({
+                "type": "assistant",
+                "sessionId": session_id,
+                "requestId": "shared-request",
+                "timestamp": "2026-05-25T20:00:00Z",
+                "message": {
+                    "model": "claude-sonnet-4-5-20250929",
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": 20,
                     },
-                }
-            )
+                },
+            })
         self._create_mock_log(test_filename, records)
 
         parser = ClaudeParser(log_path=str(test_filename))
@@ -221,14 +218,11 @@ class TestClaudeParser(unittest.TestCase):
         """Claude gives every identity-deficient source record a unique key."""
         test_filename = self.test_dir / "identity-deficient.jsonl"
         repeated_timestamp = "2026-05-25T20:00:00Z"
-        self._create_mock_log(
-            test_filename,
-            [
-                self._claude_usage_record(10, timestamp=repeated_timestamp),
-                self._claude_usage_record(20, timestamp=repeated_timestamp),
-                self._claude_usage_record(30),
-            ],
-        )
+        self._create_mock_log(test_filename, [
+            self._claude_usage_record(10, timestamp=repeated_timestamp),
+            self._claude_usage_record(20, timestamp=repeated_timestamp),
+            self._claude_usage_record(30),
+        ])
 
         parser = ClaudeParser(log_path=str(test_filename))
         runs = parser.parse()
@@ -245,21 +239,18 @@ class TestClaudeParser(unittest.TestCase):
     def test_cumulative_duplicate_uses_newest_parsed_timestamp(self):
         """Claude chooses cumulative usage by timestamp, not read order."""
         test_filename = self.test_dir / "out-of-order.jsonl"
-        self._create_mock_log(
-            test_filename,
-            [
-                self._claude_usage_record(
-                    200,
-                    request_id="cumulative-request",
-                    timestamp="2026-05-25T20:10:00Z",
-                ),
-                self._claude_usage_record(
-                    100,
-                    request_id="cumulative-request",
-                    timestamp="2026-05-25T20:00:00Z",
-                ),
-            ],
-        )
+        self._create_mock_log(test_filename, [
+            self._claude_usage_record(
+                200,
+                request_id="cumulative-request",
+                timestamp="2026-05-25T20:10:00Z",
+            ),
+            self._claude_usage_record(
+                100,
+                request_id="cumulative-request",
+                timestamp="2026-05-25T20:00:00Z",
+            ),
+        ])
 
         run = ClaudeParser(log_path=str(test_filename)).parse()[0]
 
@@ -271,24 +262,18 @@ class TestClaudeParser(unittest.TestCase):
         timestamp = "2026-05-25T20:00:00Z"
         first_file = self.test_dir / "a.jsonl"
         second_file = self.test_dir / "b.jsonl"
-        self._create_mock_log(
-            first_file,
-            [
-                self._claude_usage_record(100, "tied-request", timestamp),
-                self._claude_usage_record(200, "tied-request", timestamp),
-            ],
-        )
+        self._create_mock_log(first_file, [
+            self._claude_usage_record(100, "tied-request", timestamp),
+            self._claude_usage_record(200, "tied-request", timestamp),
+        ])
 
         first_run = ClaudeParser(log_path=str(first_file)).parse()[0]
         self.assertEqual(first_run["input_tokens"], 200)
         self.assertEqual(first_run["source_line"], 2)
 
-        self._create_mock_log(
-            second_file,
-            [
-                self._claude_usage_record(300, "tied-request", timestamp),
-            ],
-        )
+        self._create_mock_log(second_file, [
+            self._claude_usage_record(300, "tied-request", timestamp),
+        ])
         final_run = ClaudeParser(log_path=str(self.test_dir)).parse()[0]
         self.assertEqual(final_run["input_tokens"], 300)
         self.assertEqual(final_run["filepath"], str(second_file.resolve()))
@@ -297,26 +282,21 @@ class TestClaudeParser(unittest.TestCase):
         """Claude applies distinct rates to cache reads and cache creation."""
         test_filename = self.test_dir / "mock_claude_pricing.jsonl"
         model = "claude-sonnet-4-5-20250929"
-        self._create_mock_log(
-            test_filename,
-            [
-                {
-                    "type": "assistant",
-                    "sessionId": "pricing-session",
-                    "requestId": "pricing-request",
-                    "timestamp": "2026-05-25T20:00:00Z",
-                    "message": {
-                        "model": model,
-                        "usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
-                            "cache_read_input_tokens": 40,
-                            "cache_creation_input_tokens": 10,
-                        },
-                    },
-                }
-            ],
-        )
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "sessionId": "pricing-session",
+            "requestId": "pricing-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": model,
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
 
         parser = ClaudeParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -337,25 +317,20 @@ class TestClaudeParser(unittest.TestCase):
     def test_unknown_model_is_unpriced_and_reported(self):
         """Claude retains unknown-model usage and reports its cost as incomplete."""
         test_filename = self.test_dir / "mock_claude_unknown.jsonl"
-        self._create_mock_log(
-            test_filename,
-            [
-                {
-                    "type": "assistant",
-                    "requestId": "unknown-request",
-                    "timestamp": "2026-05-25T20:00:00Z",
-                    "message": {
-                        "model": "claude-unknown",
-                        "usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
-                            "cache_read_input_tokens": 40,
-                            "cache_creation_input_tokens": 10,
-                        },
-                    },
-                }
-            ],
-        )
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "requestId": "unknown-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-unknown",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
 
         parser = ClaudeParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -409,24 +384,19 @@ class TestClaudeParser(unittest.TestCase):
     def test_missing_path_clears_previous_results(self):
         """Claude clears previous results when a later parse path is missing."""
         test_filename = self.test_dir / "mock_claude_state.jsonl"
-        self._create_mock_log(
-            test_filename,
-            [
-                {
-                    "type": "assistant",
-                    "sessionId": "state-session",
-                    "requestId": "state-request",
-                    "timestamp": "2026-05-25T20:00:00Z",
-                    "message": {
-                        "model": "claude-sonnet-4-5-20250929",
-                        "usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
-                        },
-                    },
-                }
-            ],
-        )
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "sessionId": "state-session",
+            "requestId": "state-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                },
+            },
+        }])
 
         parser = ClaudeParser(log_path=str(test_filename))
         self.assertEqual(len(parser.parse()), 1)
@@ -446,26 +416,21 @@ class TestClaudeParser(unittest.TestCase):
     def test_repeated_parse_does_not_duplicate_results(self):
         """Claude produces identical state when the same file is parsed twice."""
         test_filename = self.test_dir / "mock_claude_repeated.jsonl"
-        self._create_mock_log(
-            test_filename,
-            [
-                {
-                    "type": "assistant",
-                    "sessionId": "repeat-session",
-                    "requestId": "repeat-request",
-                    "timestamp": "2026-05-25T20:00:00Z",
-                    "message": {
-                        "model": "claude-sonnet-4-5-20250929",
-                        "usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
-                            "cache_read_input_tokens": 40,
-                            "cache_creation_input_tokens": 10,
-                        },
-                    },
-                }
-            ],
-        )
+        self._create_mock_log(test_filename, [{
+            "type": "assistant",
+            "sessionId": "repeat-session",
+            "requestId": "repeat-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
 
         parser = ClaudeParser(log_path=str(test_filename))
         first_runs = parser.parse().copy()
@@ -499,41 +464,31 @@ class TestClaudeParser(unittest.TestCase):
         unknown_file = self.test_dir / "unknown.jsonl"
         empty_dir = self.test_dir / "empty"
         empty_dir.mkdir()
-        self._create_mock_log(
-            known_file,
-            [
-                {
-                    "type": "assistant",
-                    "sessionId": "known-session",
-                    "requestId": "known-request",
-                    "timestamp": "2026-05-25T20:00:00Z",
-                    "message": {
-                        "model": "claude-sonnet-4-5-20250929",
-                        "usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
-                            "cache_read_input_tokens": 40,
-                            "cache_creation_input_tokens": 10,
-                        },
-                    },
-                }
-            ],
-        )
-        self._create_mock_log(
-            unknown_file,
-            [
-                {
-                    "type": "assistant",
-                    "sessionId": "unknown-session",
-                    "requestId": "unknown-request",
-                    "timestamp": "2026-05-26T20:00:00Z",
-                    "message": {
-                        "model": "claude-unknown",
-                        "usage": {"input_tokens": 10, "output_tokens": 2},
-                    },
-                }
-            ],
-        )
+        self._create_mock_log(known_file, [{
+            "type": "assistant",
+            "sessionId": "known-session",
+            "requestId": "known-request",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "message": {
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 10,
+                },
+            },
+        }])
+        self._create_mock_log(unknown_file, [{
+            "type": "assistant",
+            "sessionId": "unknown-session",
+            "requestId": "unknown-request",
+            "timestamp": "2026-05-26T20:00:00Z",
+            "message": {
+                "model": "claude-unknown",
+                "usage": {"input_tokens": 10, "output_tokens": 2},
+            },
+        }])
 
         parser = ClaudeParser(log_path=str(known_file))
         parser.parse()
@@ -560,7 +515,6 @@ class TestClaudeParser(unittest.TestCase):
         self.assertEqual(parser.unknown_models, set())
         self.assertEqual(parser.stats_by_folder, {})
         empty_dir.rmdir()
-
 
 if __name__ == "__main__":
     unittest.main()

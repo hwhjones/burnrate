@@ -142,7 +142,9 @@ class TestFileReadErrors(unittest.TestCase):
 
                             self.assertEqual(len(runs), 1)
                             self.assertEqual(parser.total_tokens, 10)
-                            self.assertEqual(parser.skip_counts["malformed_json"], 1)
+                            self.assertEqual(
+                                parser.skip_counts["malformed_json"], 1
+                            )
                             self.assertFalse(parser.scan_incomplete)
                             self.assertEqual(parser.file_read_errors, [])
 
@@ -174,9 +176,7 @@ class TestFileReadErrors(unittest.TestCase):
                         self.assertEqual(runs, [])
                         self.assertTrue(parser.invalid_input_path)
                         self.assertFalse(parser.scan_incomplete)
-                        self.assertEqual(
-                            output.getvalue().count("Could not inspect"), 1
-                        )
+                        self.assertEqual(output.getvalue().count("Could not inspect"), 1)
                         self.assertIn(str(path), output.getvalue())
 
     def test_empty_directory_is_a_complete_scan(self):

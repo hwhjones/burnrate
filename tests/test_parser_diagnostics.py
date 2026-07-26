@@ -141,11 +141,7 @@ class TestParserDiagnostics(unittest.TestCase):
                     path = Path(directory) / "records.jsonl"
                     self._write_lines(
                         path,
-                        [
-                            "not valid JSON",
-                            json.dumps(invalid_shape),
-                            json.dumps(valid),
-                        ],
+                        ["not valid JSON", json.dumps(invalid_shape), json.dumps(valid)],
                     )
                     parser = parser_class(log_path=str(path))
 
@@ -157,9 +153,7 @@ class TestParserDiagnostics(unittest.TestCase):
 
                     self._write_lines(path, [json.dumps(valid)])
                     parser.parse()
-                    self.assertTrue(
-                        all(count == 0 for count in parser.skip_counts.values())
-                    )
+                    self.assertTrue(all(count == 0 for count in parser.skip_counts.values()))
                     self.assertEqual(parser.rejected_usage_records, 0)
                     self.assertFalse(parser.totals_potentially_incomplete)
 
