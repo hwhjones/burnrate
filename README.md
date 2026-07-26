@@ -120,16 +120,6 @@ Run the complete test suite from the repository root:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Run lint and formatting checks with:
-
-```powershell
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-```
-
-Continuous integration runs these checks, the complete test suite, and the
-distribution smoke test on Python 3.9 and 3.14.
-
 ## Project structure
 
 ```text
@@ -157,9 +147,6 @@ burnrate/
 |   |-- test_pricing.py
 |   |-- test_undated_projections.py
 |   `-- test_version.py
-|-- .github/
-|   `-- workflows/
-|       `-- ci.yml
 |-- LICENSE
 |-- pyproject.toml
 `-- README.md

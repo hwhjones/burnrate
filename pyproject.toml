@@ -14,10 +14,3 @@ burnrate = "burnrate.main:run"
 
 [tool.setuptools.packages.find]
 include = ["burnrate*"]
-
-[tool.ruff]
-target-version = "py39"
-line-length = 88
-
-[tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]

@@ -362,18 +362,18 @@ Dependencies: none.
 
 ### L7 - Add linting and formatting checks
 
-- [x] Configure Ruff for Python 3.9.
-- [x] Apply formatting as a dedicated mechanical change.
-- [x] Document lint and formatting-check commands for contributors.
+- [ ] Configure Ruff for Python 3.9.
+- [ ] Apply formatting as a dedicated mechanical change.
+- [ ] Document lint and formatting-check commands for contributors.
 
 Dependencies: L6.
 
 ### L8 - Add continuous integration
 
-- [x] Run unit tests on Python 3.9 and the latest stable Python available in
+- [ ] Run unit tests on Python 3.9 and the latest stable Python available in
   GitHub Actions.
-- [x] Run Ruff checks and package-build smoke tests.
-- [x] Cache only safe dependency and build artifacts.
+- [ ] Run Ruff checks and package-build smoke tests.
+- [ ] Cache only safe dependency and build artifacts.
 
 Dependencies: M4 and L7.
 
