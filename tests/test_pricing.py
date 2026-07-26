@@ -11,7 +11,6 @@ from burnrate.pricing import (
 
 
 class TestPricing(unittest.TestCase):
-
     REQUIRED_METADATA_FIELDS = {
         "source_url",
         "currency",
@@ -109,7 +108,9 @@ class TestPricing(unittest.TestCase):
                         "cache_write_tokens": 0,
                     }
                     token_counts[f"{category}_tokens"] = 1_000_000
-                    with self.subTest(provider=provider, model=model, category=category):
+                    with self.subTest(
+                        provider=provider, model=model, category=category
+                    ):
                         costs = calculate_cost(table, model, **token_counts)
                         self.assertIsNotNone(costs)
                         if category in {"input", "output"}:
@@ -154,11 +155,7 @@ class TestPricing(unittest.TestCase):
         )
 
         expected_cache = 800 * rates["cache_read"]
-        expected_total = (
-            200 * rates["input"]
-            + 30 * rates["output"]
-            + expected_cache
-        )
+        expected_total = 200 * rates["input"] + 30 * rates["output"] + expected_cache
         self.assertAlmostEqual(costs["cache_read"], expected_cache)
         self.assertEqual(costs["cache_write"], 0.0)
         self.assertAlmostEqual(costs["total"], expected_total)
@@ -179,10 +176,7 @@ class TestPricing(unittest.TestCase):
         expected_read = 40 * rates["cache_read"]
         expected_write = 10 * rates["cache_write"]
         expected_total = (
-            100 * rates["input"]
-            + 20 * rates["output"]
-            + expected_read
-            + expected_write
+            100 * rates["input"] + 20 * rates["output"] + expected_read + expected_write
         )
         self.assertAlmostEqual(costs["cache_read"], expected_read)
         self.assertAlmostEqual(costs["cache_write"], expected_write)

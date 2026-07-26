@@ -8,7 +8,6 @@ import burnrate.main as cli
 
 
 class TestCLI(unittest.TestCase):
-
     def _run_with_mock_parsers(
         self,
         arguments,
@@ -37,9 +36,7 @@ class TestCLI(unittest.TestCase):
 
     def test_default_command_runs_codex_parser(self):
         """CLI defaults to Codex and runs parse followed by summary."""
-        status, codex_parser, codex, claude_parser, _ = (
-            self._run_with_mock_parsers([])
-        )
+        status, codex_parser, codex, claude_parser, _ = self._run_with_mock_parsers([])
 
         self.assertEqual(status, 0)
         codex_parser.assert_called_once_with(log_path=cli.DEFAULT_CODEX_LOG)
@@ -49,8 +46,8 @@ class TestCLI(unittest.TestCase):
 
     def test_claude_option_runs_claude_parser(self):
         """CLI selects Claude and supplies its default log directory."""
-        status, codex_parser, _, claude_parser, claude = (
-            self._run_with_mock_parsers(["--parser", "claude"])
+        status, codex_parser, _, claude_parser, claude = self._run_with_mock_parsers(
+            ["--parser", "claude"]
         )
 
         self.assertEqual(status, 0)

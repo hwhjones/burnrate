@@ -10,7 +10,6 @@ from burnrate.parsers.codex_parser import CodexParser, PRICING
 
 
 class TestCodexParser(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = Path("mock_codex_logs")
         # Create a temporary directory for mock log files before each test.
@@ -29,7 +28,7 @@ class TestCodexParser(unittest.TestCase):
                          a JSON log entry to be written as a line in the file.
         """
         filename.parent.mkdir(parents=True, exist_ok=True)
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, "w", encoding="utf-8") as f:
             for entry in data:
                 f.write(json.dumps(entry) + "\n")
 
@@ -73,9 +72,12 @@ class TestCodexParser(unittest.TestCase):
                     "type": "token_count",
                     "info": {
                         "model": "gpt-5.5",
-                        "last_token_usage": {"input_tokens": 200000, "output_tokens": 50000}
-                    }
-                }
+                        "last_token_usage": {
+                            "input_tokens": 200000,
+                            "output_tokens": 50000,
+                        },
+                    },
+                },
             },
             {
                 "type": "event_msg",
@@ -85,10 +87,13 @@ class TestCodexParser(unittest.TestCase):
                     "type": "token_count",
                     "info": {
                         "model": "gpt-5.5",
-                        "last_token_usage": {"input_tokens": 500000, "output_tokens": 120000}
-                    }
-                }
-            }
+                        "last_token_usage": {
+                            "input_tokens": 500000,
+                            "output_tokens": 120000,
+                        },
+                    },
+                },
+            },
         ]
         self._create_mock_log(test_filename, mock_data)
 
@@ -96,20 +101,26 @@ class TestCodexParser(unittest.TestCase):
         runs = parser.parse()
 
         # Each token_count event is captured as a distinct run
-        self.assertEqual(len(runs), 2) 
-        
+        self.assertEqual(len(runs), 2)
+
         expected_total_input = 200000 + 500000
         expected_total_output = 50000 + 120000
-        
+
         model_pricing = PRICING["gpt-5.5"]
-        cost_req1 = (200000 * model_pricing["input"]) + (50000 * model_pricing["output"])
-        cost_req2 = (500000 * model_pricing["input"]) + (120000 * model_pricing["output"])
+        cost_req1 = (200000 * model_pricing["input"]) + (
+            50000 * model_pricing["output"]
+        )
+        cost_req2 = (500000 * model_pricing["input"]) + (
+            120000 * model_pricing["output"]
+        )
         expected_total_cost = cost_req1 + cost_req2
 
-        self.assertEqual(parser.total_tokens, expected_total_input + expected_total_output)
+        self.assertEqual(
+            parser.total_tokens, expected_total_input + expected_total_output
+        )
         self.assertAlmostEqual(parser.total_cost, expected_total_cost)
 
-        with patch('sys.stdout', new=StringIO()) as fake_out:
+        with patch("sys.stdout", new=StringIO()) as fake_out:
             parser.summary()
             output = fake_out.getvalue()
             self.assertIn("TOTALS", output)
@@ -128,22 +139,24 @@ class TestCodexParser(unittest.TestCase):
             ("2026-05-25T20:00:00Z", 100),
             ("2026-05-25T20:01:00Z", 250),
         ]:
-            records.append({
-                "type": "event_msg",
-                "session_id": "session-a",
-                "requestId": "shared-request",
-                "timestamp": timestamp,
-                "payload": {
-                    "type": "token_count",
-                    "info": {
-                        "model": "gpt-5.5",
-                        "last_token_usage": {
-                            "input_tokens": input_tokens,
-                            "output_tokens": 20,
+            records.append(
+                {
+                    "type": "event_msg",
+                    "session_id": "session-a",
+                    "requestId": "shared-request",
+                    "timestamp": timestamp,
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-5.5",
+                            "last_token_usage": {
+                                "input_tokens": input_tokens,
+                                "output_tokens": 20,
+                            },
                         },
                     },
-                },
-            })
+                }
+            )
         self._create_mock_log(test_filename, records)
 
         runs = CodexParser(log_path=str(test_filename)).parse()
@@ -158,22 +171,24 @@ class TestCodexParser(unittest.TestCase):
         test_filename = self.test_dir / "codex-sessions.jsonl"
         records = []
         for session_id, input_tokens in [("session-a", 100), ("session-b", 200)]:
-            records.append({
-                "type": "event_msg",
-                "session_id": session_id,
-                "requestId": "shared-request",
-                "timestamp": "2026-05-25T20:00:00Z",
-                "payload": {
-                    "type": "token_count",
-                    "info": {
-                        "model": "gpt-5.5",
-                        "last_token_usage": {
-                            "input_tokens": input_tokens,
-                            "output_tokens": 20,
+            records.append(
+                {
+                    "type": "event_msg",
+                    "session_id": session_id,
+                    "requestId": "shared-request",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-5.5",
+                            "last_token_usage": {
+                                "input_tokens": input_tokens,
+                                "output_tokens": 20,
+                            },
                         },
                     },
-                },
-            })
+                }
+            )
         self._create_mock_log(test_filename, records)
 
         parser = CodexParser(log_path=str(test_filename))
@@ -190,11 +205,14 @@ class TestCodexParser(unittest.TestCase):
         """Codex gives every identity-deficient source record a unique key."""
         test_filename = self.test_dir / "identity-deficient.jsonl"
         repeated_timestamp = "2026-05-25T20:00:00Z"
-        self._create_mock_log(test_filename, [
-            self._codex_usage_record(10, timestamp=repeated_timestamp),
-            self._codex_usage_record(20, timestamp=repeated_timestamp),
-            self._codex_usage_record(30),
-        ])
+        self._create_mock_log(
+            test_filename,
+            [
+                self._codex_usage_record(10, timestamp=repeated_timestamp),
+                self._codex_usage_record(20, timestamp=repeated_timestamp),
+                self._codex_usage_record(30),
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         runs = parser.parse()
@@ -211,18 +229,21 @@ class TestCodexParser(unittest.TestCase):
     def test_cumulative_duplicate_uses_newest_parsed_timestamp(self):
         """Codex chooses cumulative usage by timestamp, not read order."""
         test_filename = self.test_dir / "out-of-order.jsonl"
-        self._create_mock_log(test_filename, [
-            self._codex_usage_record(
-                200,
-                request_id="cumulative-request",
-                timestamp="2026-05-25T20:10:00Z",
-            ),
-            self._codex_usage_record(
-                100,
-                request_id="cumulative-request",
-                timestamp="2026-05-25T20:00:00Z",
-            ),
-        ])
+        self._create_mock_log(
+            test_filename,
+            [
+                self._codex_usage_record(
+                    200,
+                    request_id="cumulative-request",
+                    timestamp="2026-05-25T20:10:00Z",
+                ),
+                self._codex_usage_record(
+                    100,
+                    request_id="cumulative-request",
+                    timestamp="2026-05-25T20:00:00Z",
+                ),
+            ],
+        )
 
         run = CodexParser(log_path=str(test_filename)).parse()[0]
 
@@ -234,18 +255,24 @@ class TestCodexParser(unittest.TestCase):
         timestamp = "2026-05-25T20:00:00Z"
         first_file = self.test_dir / "a.jsonl"
         second_file = self.test_dir / "b.jsonl"
-        self._create_mock_log(first_file, [
-            self._codex_usage_record(100, "tied-request", timestamp),
-            self._codex_usage_record(200, "tied-request", timestamp),
-        ])
+        self._create_mock_log(
+            first_file,
+            [
+                self._codex_usage_record(100, "tied-request", timestamp),
+                self._codex_usage_record(200, "tied-request", timestamp),
+            ],
+        )
 
         first_run = CodexParser(log_path=str(first_file)).parse()[0]
         self.assertEqual(first_run["input_tokens"], 200)
         self.assertEqual(first_run["source_line"], 2)
 
-        self._create_mock_log(second_file, [
-            self._codex_usage_record(300, "tied-request", timestamp),
-        ])
+        self._create_mock_log(
+            second_file,
+            [
+                self._codex_usage_record(300, "tied-request", timestamp),
+            ],
+        )
         final_run = CodexParser(log_path=str(self.test_dir)).parse()[0]
         self.assertEqual(final_run["input_tokens"], 300)
         self.assertEqual(final_run["filepath"], str(second_file.resolve()))
@@ -253,23 +280,28 @@ class TestCodexParser(unittest.TestCase):
     def test_cached_input_and_reasoning_are_priced_once(self):
         """Codex prices cached input separately and does not double-charge reasoning."""
         test_filename = self.test_dir / "mock_codex_pricing.jsonl"
-        self._create_mock_log(test_filename, [{
-            "type": "event_msg",
-            "session_id": "pricing-session",
-            "timestamp": "2026-05-25T20:00:00Z",
-            "payload": {
-                "type": "token_count",
-                "info": {
-                    "model": "gpt-5.5",
-                    "last_token_usage": {
-                        "input_tokens": 1000,
-                        "cached_input_tokens": 800,
-                        "output_tokens": 200,
-                        "reasoning_output_tokens": 50,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "event_msg",
+                    "session_id": "pricing-session",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-5.5",
+                            "last_token_usage": {
+                                "input_tokens": 1000,
+                                "cached_input_tokens": 800,
+                                "output_tokens": 200,
+                                "reasoning_output_tokens": 50,
+                            },
+                        },
                     },
-                },
-            },
-        }])
+                }
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -292,21 +324,26 @@ class TestCodexParser(unittest.TestCase):
     def test_unknown_model_is_unpriced_and_reported(self):
         """Codex retains unknown-model usage and reports its cost as incomplete."""
         test_filename = self.test_dir / "mock_codex_unknown.jsonl"
-        self._create_mock_log(test_filename, [{
-            "type": "event_msg",
-            "timestamp": "2026-05-25T20:00:00Z",
-            "payload": {
-                "type": "token_count",
-                "info": {
-                    "model": "gpt-unknown",
-                    "last_token_usage": {
-                        "input_tokens": 100,
-                        "cached_input_tokens": 20,
-                        "output_tokens": 30,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "event_msg",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-unknown",
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "cached_input_tokens": 20,
+                                "output_tokens": 30,
+                            },
+                        },
                     },
-                },
-            },
-        }])
+                }
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -326,19 +363,24 @@ class TestCodexParser(unittest.TestCase):
     def test_missing_model_without_turn_context_is_unpriced(self):
         """Codex does not guess a priced model when all model metadata is absent."""
         test_filename = self.test_dir / "mock_codex_missing_model.jsonl"
-        self._create_mock_log(test_filename, [{
-            "type": "event_msg",
-            "timestamp": "2026-05-25T20:00:00Z",
-            "payload": {
-                "type": "token_count",
-                "info": {
-                    "last_token_usage": {
-                        "input_tokens": 100,
-                        "output_tokens": 20,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "event_msg",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                            },
+                        },
                     },
-                },
-            },
-        }])
+                }
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -359,25 +401,28 @@ class TestCodexParser(unittest.TestCase):
     def test_turn_context_without_model_remains_unpriced(self):
         """Codex ignores an empty turn context instead of selecting a priced fallback."""
         test_filename = self.test_dir / "mock_codex_empty_context.jsonl"
-        self._create_mock_log(test_filename, [
-            {
-                "type": "turn_context",
-                "payload": {},
-            },
-            {
-                "type": "event_msg",
-                "timestamp": "2026-05-25T20:00:00Z",
-                "payload": {
-                    "type": "token_count",
-                    "info": {
-                        "last_token_usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "turn_context",
+                    "payload": {},
+                },
+                {
+                    "type": "event_msg",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                            },
                         },
                     },
                 },
-            },
-        ])
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -389,25 +434,28 @@ class TestCodexParser(unittest.TestCase):
     def test_turn_context_model_prices_usage_without_info_model(self):
         """Codex uses explicit turn-context model metadata for following usage."""
         test_filename = self.test_dir / "mock_codex_context_model.jsonl"
-        self._create_mock_log(test_filename, [
-            {
-                "type": "turn_context",
-                "payload": {"model": "gpt-5.5"},
-            },
-            {
-                "type": "event_msg",
-                "timestamp": "2026-05-25T20:00:00Z",
-                "payload": {
-                    "type": "token_count",
-                    "info": {
-                        "last_token_usage": {
-                            "input_tokens": 100,
-                            "output_tokens": 20,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "turn_context",
+                    "payload": {"model": "gpt-5.5"},
+                },
+                {
+                    "type": "event_msg",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                            },
                         },
                     },
                 },
-            },
-        ])
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         run = parser.parse()[0]
@@ -457,21 +505,26 @@ class TestCodexParser(unittest.TestCase):
     def test_missing_path_clears_previous_results(self):
         """Codex clears previous results when a later parse path is missing."""
         test_filename = self.test_dir / "mock_codex_state.jsonl"
-        self._create_mock_log(test_filename, [{
-            "type": "event_msg",
-            "session_id": "state-session",
-            "timestamp": "2026-05-25T20:00:00Z",
-            "payload": {
-                "type": "token_count",
-                "info": {
-                    "model": "gpt-5.5",
-                    "last_token_usage": {
-                        "input_tokens": 100,
-                        "output_tokens": 20,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "event_msg",
+                    "session_id": "state-session",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-5.5",
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                            },
+                        },
                     },
-                },
-            },
-        }])
+                }
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         self.assertEqual(len(parser.parse()), 1)
@@ -491,23 +544,28 @@ class TestCodexParser(unittest.TestCase):
     def test_repeated_parse_does_not_duplicate_results(self):
         """Codex produces identical state when the same file is parsed twice."""
         test_filename = self.test_dir / "mock_codex_repeated.jsonl"
-        self._create_mock_log(test_filename, [{
-            "type": "event_msg",
-            "session_id": "repeat-session",
-            "timestamp": "2026-05-25T20:00:00Z",
-            "payload": {
-                "type": "token_count",
-                "info": {
-                    "model": "gpt-5.5",
-                    "last_token_usage": {
-                        "input_tokens": 100,
-                        "cached_input_tokens": 20,
-                        "output_tokens": 30,
-                        "reasoning_output_tokens": 5,
+        self._create_mock_log(
+            test_filename,
+            [
+                {
+                    "type": "event_msg",
+                    "session_id": "repeat-session",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-5.5",
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "cached_input_tokens": 20,
+                                "output_tokens": 30,
+                                "reasoning_output_tokens": 5,
+                            },
+                        },
                     },
-                },
-            },
-        }])
+                }
+            ],
+        )
 
         parser = CodexParser(log_path=str(test_filename))
         first_runs = parser.parse().copy()
@@ -541,29 +599,48 @@ class TestCodexParser(unittest.TestCase):
         unknown_file = self.test_dir / "unknown.jsonl"
         empty_dir = self.test_dir / "empty"
         empty_dir.mkdir()
-        self._create_mock_log(known_file, [{
-            "type": "event_msg",
-            "session_id": "known-session",
-            "timestamp": "2026-05-25T20:00:00Z",
-            "payload": {"type": "token_count", "info": {
-                "model": "gpt-5.5",
-                "last_token_usage": {
-                    "input_tokens": 100,
-                    "cached_input_tokens": 20,
-                    "output_tokens": 30,
-                    "reasoning_output_tokens": 5,
-                },
-            }},
-        }])
-        self._create_mock_log(unknown_file, [{
-            "type": "event_msg",
-            "session_id": "unknown-session",
-            "timestamp": "2026-05-26T20:00:00Z",
-            "payload": {"type": "token_count", "info": {
-                "model": "gpt-unknown",
-                "last_token_usage": {"input_tokens": 10, "output_tokens": 2},
-            }},
-        }])
+        self._create_mock_log(
+            known_file,
+            [
+                {
+                    "type": "event_msg",
+                    "session_id": "known-session",
+                    "timestamp": "2026-05-25T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-5.5",
+                            "last_token_usage": {
+                                "input_tokens": 100,
+                                "cached_input_tokens": 20,
+                                "output_tokens": 30,
+                                "reasoning_output_tokens": 5,
+                            },
+                        },
+                    },
+                }
+            ],
+        )
+        self._create_mock_log(
+            unknown_file,
+            [
+                {
+                    "type": "event_msg",
+                    "session_id": "unknown-session",
+                    "timestamp": "2026-05-26T20:00:00Z",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "model": "gpt-unknown",
+                            "last_token_usage": {
+                                "input_tokens": 10,
+                                "output_tokens": 2,
+                            },
+                        },
+                    },
+                }
+            ],
+        )
 
         parser = CodexParser(log_path=str(known_file))
         parser.parse()

@@ -3,7 +3,9 @@
 from importlib import metadata
 
 from .main import run
-from .parsers import CodexParser, ClaudeParser, BaseParser
+from .parsers import BaseParser, ClaudeParser, CodexParser
+
+__all__ = ["BaseParser", "ClaudeParser", "CodexParser", "run"]
 
 try:
     __version__ = metadata.version("burnrate")
