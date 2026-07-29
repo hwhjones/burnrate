@@ -514,92 +514,145 @@ Proposed versions are provisional and scope-driven rather than date-driven:
 | Stage | Proposed version | Release meaning |
 | --- | --- | --- |
 | Current baseline | `v0.1.1` | Hardened local provider-specific CLI |
-| Product milestone 1 | `v0.2.0` | Reusable typed analysis boundary |
-| Product milestone 2 | `v0.3.0` | Unified local analysis and HTML/JSON reports |
-| Product milestone 3 | `v0.4.0` | Local task-level execution-intelligence pilot |
-| Product milestone 4 | `v0.5.0` | Optional ephemeral AWS processing preview |
-| Product milestone 5 | `v0.5.1` | Portfolio, operational, and release hardening |
+| Product milestone 1 | `v0.2.0` | Experimental local task-intelligence validation |
+| Product milestone 2 | `v0.3.0` | Reusable typed analysis boundary informed by the pilot |
+| Product milestone 3 | `v0.3.1` | Unified local analysis and deterministic JSON |
+| Product milestone 4 | `v0.3.2` | Self-contained HTML and redacted export bundles |
+| Product milestone 5 | `v0.4.0` | Supported local task-level execution intelligence |
+| Product milestone 6 | `v0.5.0` | Optional ephemeral AWS processing preview |
+| Product milestone 7 | `v0.5.1` | Portfolio, operational, and release hardening |
 
 `v1.0.0` remains unassigned. It should follow demonstrated user value, a
 stable local workflow and data schema, documented compatibility guarantees,
 and repeatable release evidence; it does not require a SaaS product.
 
-### Product milestone 1 - Complete the reusable analysis boundary (`v0.2.0`)
+### Product milestone 1 - Validate task intelligence locally (`v0.2.0`)
 
-Most of the analysis engine already exists. BurnRate v0.1.1 has:
+This milestone tests the product idea before BurnRate commits to a broad
+analysis-engine refactor. It is an intentionally provisional, local-only
+vertical slice built on the trustworthy v0.1.1 parser and pricing behavior.
+Some duplicated or provider-specific experimental code is acceptable when it
+keeps the validation work small and reversible.
 
-- [x] Provider-specific Codex and Claude JSONL parsers.
-- [x] Shared deterministic filesystem discovery and parser diagnostics.
-- [x] Session-scoped cumulative-usage deduplication.
-- [x] Central API-equivalent pricing and explicit unpriced handling.
-- [x] Dictionary-shaped usage records consumed by aggregation and reporting.
-- [x] A packaged CLI with a 67-test parser, pricing, diagnostics, and build
-  baseline.
+- [ ] Start with the provider whose logs contain the most representative task
+  history; add the second provider only if needed to answer a validation
+  question.
+- [ ] Read provider logs without modifying them and extract the minimum
+  session, request, timestamp, model, token, cost, retry, error, and tool-use
+  evidence that the source actually exposes.
+- [ ] Infer task boundaries, but allow the user to confirm, split, merge, or
+  rename inferred tasks.
+- [ ] Store task corrections, categories, outcomes, and notes in a separate
+  local sidecar file with an explicitly experimental schema version.
+- [ ] Support successful, partial, failed, abandoned, and unknown outcomes
+  without treating cost or speed as a proxy for success.
+- [ ] Generate a simple deterministic JSON or Markdown report that compares
+  transparent task metrics; do not create a composite efficiency or
+  model-quality score.
+- [ ] Mark every reported value as observed, derived, user-supplied,
+  heuristically inferred, or unavailable where that distinction matters.
+- [ ] Record whether each report observation changes or informs a concrete
+  model, prompting, context, tool, or task-decomposition decision.
 
-The remaining work is a bounded internal extraction required to reuse the
-existing engine safely from local HTML and Lambda entry points:
+Completion criteria:
+
+- Source logs remain read-only and all user-authored task metadata lives in an
+  inspectable sidecar.
+- A representative local set of at least ten tasks includes successful and
+  unsuccessful or partial outcomes.
+- The user can correct task grouping and label outcomes without editing source
+  logs.
+- Every metric exposes its evidence and labels unavailable evidence instead of
+  converting it to zero.
+- At least one report observation changes or informs a real workflow decision.
+- If the experiment does not produce actionable signal, it can be revised or
+  removed without first completing L1, L3, or a common-schema refactor.
+
+### Product milestone 2 - Complete the reusable analysis boundary (`v0.3.0`)
+
+Start this milestone only after the v0.2.0 experiment demonstrates useful
+task-level signal. The pilot should determine the durable record granularity,
+provenance, evidence-availability, task-identity, outcome, and pricing fields
+instead of having those fields designed speculatively.
+
+Before the broad extraction, complete L6 through L9 so isolated tests, Ruff,
+CI, package checks, and distribution metadata protect the refactor. These
+delivery guardrails should not block iteration on the v0.2.0 experiment.
 
 - [ ] Build on L1 to define a versioned typed and serializable common record,
-  summary, and diagnostic schema while preserving dictionary conversion.
+  summary, diagnostic, and analysis-result schema while preserving dictionary
+  conversion.
+- [ ] Preserve provider, session and request identity, source location,
+  timestamp validity, model and token categories, pricing completeness,
+  rate-card identity, evidence provenance, and optional provider metadata
+  where the validated workflow requires them.
 - [ ] Build on L3 to move aggregation into a pure operation over common
   records and make console rendering a presentation adapter.
 - [ ] Return structured file and record diagnostics from the reusable path
   instead of requiring parser-side printing.
 - [ ] Add one application-service entry point that can analyse either or both
   providers from explicit paths without invoking the CLI.
+- [ ] Keep existing parser methods, dictionary conversion, and console behavior
+  as compatibility surfaces throughout the extraction.
 
 Completion criteria:
 
 - All existing tests remain green and current CLI output remains compatible.
 - Both parsers convert their existing results to the versioned common schema.
 - Parsing and aggregation can complete without writing to stdout.
-- The CLI, local report generator, and later Lambda worker can call the same
-  application-service entry point.
+- The validated task-intelligence evidence requirements are represented
+  without pretending provider-specific evidence is universal.
+- The CLI, local report generators, task workflow, and later Lambda worker can
+  call the same application-service entry point.
 
-### Product milestone 2 - Complete the local product experience (`v0.3.0`)
-
-BurnRate v0.1.1 already provides a usable local product:
-
-- [x] An installed console command and equivalent Python module entry point.
-- [x] Default Claude and Codex log locations plus explicit path overrides.
-- [x] Deterministic single-file and recursive-directory scanning.
-- [x] Provider-specific console summaries, projections, pricing caveats, and
-  diagnostics.
-- [x] Meaningful process exit statuses for automation and partial scans.
-- [x] Account-free, offline operation with no third-party runtime
-  dependencies.
-
-The remaining work turns the current provider-by-provider CLI into one
-coherent local analysis and reporting workflow:
+### Product milestone 3 - Add unified analysis and deterministic JSON (`v0.3.1`)
 
 - [ ] Auto-detect and analyse both Claude Code and Codex logs in one
   invocation while retaining explicit provider and path selection.
-- [ ] Generate deterministic JSON and self-contained HTML reports alongside
-  the existing console output.
-- [ ] Add session-level fields required for task grouping, outcome labelling,
-  context-efficiency analysis, and tool-use analysis where the source logs
-  provide them reliably.
-- [ ] Add local redaction, an inspectable export manifest, and a versioned
-  diagnostic bundle.
+- [ ] Generate deterministic, versioned JSON alongside the existing console
+  output.
+- [ ] Keep provider asymmetry, missing evidence, pricing completeness, source
+  provenance, and diagnostics explicit in the JSON contract.
 
 Completion criteria:
 
 - One command analyses both supported sources.
 - Existing provider-specific commands remain compatible.
+- Console and JSON totals agree for the same input.
+- Repeated analysis of the same inputs produces equivalent JSON.
+- The workflow remains offline and makes no network requests.
+
+### Product milestone 4 - Add HTML and redacted exports (`v0.3.2`)
+
+- [ ] Generate a self-contained local HTML view from the same versioned
+  analysis result used by JSON and console rendering.
+- [ ] Add local redaction, an inspectable export manifest, and a versioned
+  diagnostic bundle.
+- [ ] Keep report generation independent of provider-log parsing and
+  aggregation.
+
+Completion criteria:
+
 - Console, JSON, and HTML outputs agree for the same input.
-- The complete workflow remains offline and makes no network requests.
+- The HTML report is self-contained and works offline.
 - Users can inspect exactly which fields an exported bundle contains.
+- Redaction and export tests cover representative sensitive fields and missing
+  evidence.
 
-### Product milestone 3 - Test task-level execution intelligence locally (`v0.4.0`)
+### Product milestone 5 - Productize validated task intelligence (`v0.4.0`)
 
-- Allow related sessions to be grouped into an engineering task.
-- Allow an outcome to be marked successful, partial, failed, or abandoned.
-- Calculate task cost, failed-effort cost, retries, context churn, tool use,
+- [ ] Move the validated task-grouping and outcome workflow onto the reusable
+  analysis boundary without silently changing its meaning.
+- [ ] Support both providers where their observed evidence permits it and keep
+  provider-specific limitations explicit.
+- [ ] Calculate task cost, failed-effort cost, retries, context churn, tool use,
   and other efficiency metrics only where supported by observed log data.
-- Generate one explainable recommendation linked to its observations and
-  confidence instead of introducing speculative model-quality scoring.
-- Test the workflow and report locally with a small group of Claude Code and
-  Codex users before building the optional cloud path.
+- [ ] Generate explainable recommendations linked to observations, assumptions,
+  and confidence instead of introducing speculative model-quality scoring.
+- [ ] Define compatibility or migration behavior for experimental v0.2.0
+  sidecars before declaring the workflow supported.
+- [ ] Test the supported workflow and report with a small group of Claude Code
+  and Codex users before building the optional cloud path.
 
 Completion criteria:
 
@@ -610,10 +663,10 @@ Completion criteria:
   provide structured feedback.
 - Pilot users demonstrate that the report changes or informs an agent workflow
   decision.
-- The cloud implementation is not started until the local report demonstrates
-  sufficient user value.
+- The cloud implementation is not started until the supported local report
+  demonstrates sufficient user value.
 
-### Product milestone 4 - Add a simple ephemeral AWS implementation (`v0.5.0`)
+### Product milestone 6 - Add a simple ephemeral AWS implementation (`v0.5.0`)
 
 - Host a minimal static upload page using S3 and CloudFront.
 - Use an API Gateway HTTP API with a small FastAPI application on Lambda.
@@ -645,12 +698,12 @@ This milestone is an optional cloud implementation of the validated local
 utility, not a SaaS release. User accounts, subscriptions, team workspaces,
 billing, multi-tenancy, and long-term hosted history are outside its scope.
 
-### Product milestone 5 - Harden the portfolio implementation (`v0.5.1`)
+### Product milestone 7 - Harden the portfolio implementation (`v0.5.1`)
 
 - Document the architecture, data flow, local/cloud privacy boundary, threat
   model, cost model, and major architecture decisions.
-- Build on L6 through L9 to add isolated tests, linting, CI, package checks,
-  and complete distribution metadata.
+- Treat the L6 through L9 guardrails as the baseline and add release evidence
+  plus cloud-specific quality checks.
 - Add contract tests, representative anonymized fixtures, failure-path tests,
   and cloud/local report-equivalence tests.
 - Document service objectives, alarms, retry and dead-letter behavior,
@@ -666,6 +719,12 @@ Completion criteria:
   testable controls.
 - Portfolio and CV claims remain limited to implemented and verified
   capabilities.
+
+## Possible future directions
+
+The following ideas are not committed releases. They describe possible SaaS,
+team, or enterprise directions only if the local product and optional cloud
+preview demonstrate demand.
 
 - Position BurnRate as the FinOps and cost-intelligence layer for AI coding
   agents: explain and govern the economics of AI software development rather
