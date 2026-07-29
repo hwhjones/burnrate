@@ -504,6 +504,169 @@ Dependencies: H2B and L14.
 
 ## Deferred to the product roadmap
 
+The existing v0.1.1 parser, pricing, diagnostics, packaging, and test
+foundation should be extended through the following milestone sequence. These
+milestones describe one local product with an optional simple cloud execution
+path; they do not commit BurnRate to becoming a SaaS product.
+
+Proposed versions are provisional and scope-driven rather than date-driven:
+
+| Stage | Proposed version | Release meaning |
+| --- | --- | --- |
+| Current baseline | `v0.1.1` | Hardened local provider-specific CLI |
+| Product milestone 1 | `v0.2.0` | Reusable typed analysis boundary |
+| Product milestone 2 | `v0.3.0` | Unified local analysis and HTML/JSON reports |
+| Product milestone 3 | `v0.4.0` | Local task-level execution-intelligence pilot |
+| Product milestone 4 | `v0.5.0` | Optional ephemeral AWS processing preview |
+| Product milestone 5 | `v0.5.1` | Portfolio, operational, and release hardening |
+
+`v1.0.0` remains unassigned. It should follow demonstrated user value, a
+stable local workflow and data schema, documented compatibility guarantees,
+and repeatable release evidence; it does not require a SaaS product.
+
+### Product milestone 1 - Complete the reusable analysis boundary (`v0.2.0`)
+
+Most of the analysis engine already exists. BurnRate v0.1.1 has:
+
+- [x] Provider-specific Codex and Claude JSONL parsers.
+- [x] Shared deterministic filesystem discovery and parser diagnostics.
+- [x] Session-scoped cumulative-usage deduplication.
+- [x] Central API-equivalent pricing and explicit unpriced handling.
+- [x] Dictionary-shaped usage records consumed by aggregation and reporting.
+- [x] A packaged CLI with a 67-test parser, pricing, diagnostics, and build
+  baseline.
+
+The remaining work is a bounded internal extraction required to reuse the
+existing engine safely from local HTML and Lambda entry points:
+
+- [ ] Build on L1 to define a versioned typed and serializable common record,
+  summary, and diagnostic schema while preserving dictionary conversion.
+- [ ] Build on L3 to move aggregation into a pure operation over common
+  records and make console rendering a presentation adapter.
+- [ ] Return structured file and record diagnostics from the reusable path
+  instead of requiring parser-side printing.
+- [ ] Add one application-service entry point that can analyse either or both
+  providers from explicit paths without invoking the CLI.
+
+Completion criteria:
+
+- All existing tests remain green and current CLI output remains compatible.
+- Both parsers convert their existing results to the versioned common schema.
+- Parsing and aggregation can complete without writing to stdout.
+- The CLI, local report generator, and later Lambda worker can call the same
+  application-service entry point.
+
+### Product milestone 2 - Complete the local product experience (`v0.3.0`)
+
+BurnRate v0.1.1 already provides a usable local product:
+
+- [x] An installed console command and equivalent Python module entry point.
+- [x] Default Claude and Codex log locations plus explicit path overrides.
+- [x] Deterministic single-file and recursive-directory scanning.
+- [x] Provider-specific console summaries, projections, pricing caveats, and
+  diagnostics.
+- [x] Meaningful process exit statuses for automation and partial scans.
+- [x] Account-free, offline operation with no third-party runtime
+  dependencies.
+
+The remaining work turns the current provider-by-provider CLI into one
+coherent local analysis and reporting workflow:
+
+- [ ] Auto-detect and analyse both Claude Code and Codex logs in one
+  invocation while retaining explicit provider and path selection.
+- [ ] Generate deterministic JSON and self-contained HTML reports alongside
+  the existing console output.
+- [ ] Add session-level fields required for task grouping, outcome labelling,
+  context-efficiency analysis, and tool-use analysis where the source logs
+  provide them reliably.
+- [ ] Add local redaction, an inspectable export manifest, and a versioned
+  diagnostic bundle.
+
+Completion criteria:
+
+- One command analyses both supported sources.
+- Existing provider-specific commands remain compatible.
+- Console, JSON, and HTML outputs agree for the same input.
+- The complete workflow remains offline and makes no network requests.
+- Users can inspect exactly which fields an exported bundle contains.
+
+### Product milestone 3 - Test task-level execution intelligence locally (`v0.4.0`)
+
+- Allow related sessions to be grouped into an engineering task.
+- Allow an outcome to be marked successful, partial, failed, or abandoned.
+- Calculate task cost, failed-effort cost, retries, context churn, tool use,
+  and other efficiency metrics only where supported by observed log data.
+- Generate one explainable recommendation linked to its observations and
+  confidence instead of introducing speculative model-quality scoring.
+- Test the workflow and report locally with a small group of Claude Code and
+  Codex users before building the optional cloud path.
+
+Completion criteria:
+
+- Every recommendation exposes its supporting evidence, assumptions, and
+  confidence.
+- Missing or unavailable evidence is labelled rather than inferred.
+- At least three pilot users complete the local task-and-outcome workflow and
+  provide structured feedback.
+- Pilot users demonstrate that the report changes or informs an agent workflow
+  decision.
+- The cloud implementation is not started until the local report demonstrates
+  sufficient user value.
+
+### Product milestone 4 - Add a simple ephemeral AWS implementation (`v0.5.0`)
+
+- Host a minimal static upload page using S3 and CloudFront.
+- Use an API Gateway HTTP API with a small FastAPI application on Lambda.
+- Upload files directly to S3 with short-lived presigned URLs.
+- Queue parsing through SQS and process jobs with a Python Lambda worker that
+  imports the shared BurnRate analysis engine.
+- Store temporary job state and generated JSON or HTML reports in S3; do not
+  introduce a database until a demonstrated requirement exists.
+- Define the infrastructure with Terraform and deploy it through GitHub
+  Actions using AWS OIDC.
+- Add least-privilege IAM, managed encryption, strict upload limits, API
+  throttling, reserved Lambda concurrency, lifecycle deletion, a dead-letter
+  queue, focused CloudWatch alarms, and AWS Budget alerts.
+
+Completion criteria:
+
+- Upload, validation, queueing, parsing, report generation, and download work
+  as one vertical production flow.
+- The validated local task-level report is available through the cloud path
+  without expanding its product scope.
+- Local and cloud execution produce equivalent reports for the same input.
+- Failed jobs are observable and recoverable through the dead-letter queue.
+- Raw uploads and reports are deleted automatically after short configured
+  retention periods.
+- The deployment has no always-on compute, load balancer, NAT Gateway, or
+  database cost.
+
+This milestone is an optional cloud implementation of the validated local
+utility, not a SaaS release. User accounts, subscriptions, team workspaces,
+billing, multi-tenancy, and long-term hosted history are outside its scope.
+
+### Product milestone 5 - Harden the portfolio implementation (`v0.5.1`)
+
+- Document the architecture, data flow, local/cloud privacy boundary, threat
+  model, cost model, and major architecture decisions.
+- Build on L6 through L9 to add isolated tests, linting, CI, package checks,
+  and complete distribution metadata.
+- Add contract tests, representative anonymized fixtures, failure-path tests,
+  and cloud/local report-equivalence tests.
+- Document service objectives, alarms, retry and dead-letter behavior,
+  rollback, automatic deletion, and the operational runbook.
+- Publish an anonymized example report, pilot findings, and measured cloud
+  cost and performance.
+
+Completion criteria:
+
+- The repository can be built, tested, deployed, operated, and removed by
+  following its documentation.
+- Security, reliability, privacy, and cost decisions are represented by
+  testable controls.
+- Portfolio and CV claims remain limited to implemented and verified
+  capabilities.
+
 - Position BurnRate as the FinOps and cost-intelligence layer for AI coding
   agents: explain and govern the economics of AI software development rather
   than becoming a general-purpose enterprise AI control plane.
