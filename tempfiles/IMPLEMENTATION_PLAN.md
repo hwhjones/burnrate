@@ -297,6 +297,82 @@ Dependencies: all High priority work plus M1 through M5.
 
 Dependencies: M6.
 
+## High priority next release: deterministic waste-signature pilot (v0.2.0)
+
+This is the next implementation priority after v0.1.1. It validates
+BurnRate's execution-intelligence proposition without reading natural-language
+message bodies or calling another LLM. All source logs remain read-only.
+
+### P1A-1 - Add a Codex structured-trace reader and fixtures
+
+- [ ] Add an experimental, provider-specific Codex event reader separate from
+  the existing token-and-cost parser; do not refactor the v0.1.1 parser path.
+- [ ] Retain only structured event fields required for the pilot: session and
+  agent lineage, timestamp, event type, token snapshot, tool name, command,
+  path, exit status, error text, and patch/mutation status.
+- [ ] Explicitly discard natural-language user, agent, and reasoning bodies.
+- [ ] Add representative anonymized fixtures covering tool calls, tool outputs,
+  token counts, patches, failed commands, and absent or malformed fields.
+- [ ] Add focused tests proving message bodies are not retained in the
+  experimental result.
+
+Dependencies: v0.1.1 release verification.
+
+### P1A-2 - Add deterministic normalization and evidence signatures
+
+- [ ] Normalize commands, paths, volatile IDs, timestamps, exit statuses, and
+  error text into stable, inspectable signatures.
+- [ ] Classify structured operations as discovery, read, test, mutation,
+  authentication, version-control, or unknown using explicit rules.
+- [ ] Preserve raw source location and normalized values so every result can
+  be traced and challenged.
+- [ ] Add exact-match and volatile-value normalization tests; do not use
+  embeddings or an LLM.
+
+Dependencies: P1A-1.
+
+### P1A-3 - Detect deterministic waste signatures
+
+- [ ] Detect repeated command attempts and repeated repository-discovery
+  operations within and across sessions.
+- [ ] Fingerprint recurring failures from normalized command, exit status, and
+  error evidence.
+- [ ] Attribute token snapshots to the timeline and calculate tokens consumed
+  before the first observed successful repository mutation.
+- [ ] Detect probable duplicated subagent work only when lineage, timing,
+  command, path, or patch-overlap evidence supports it.
+- [ ] Label every result as observed, derived, heuristic, or unavailable and
+  include a confidence rule rather than a composite score.
+
+Dependencies: P1A-2.
+
+### P1A-4 - Produce a local report, sidecar, and instruction candidates
+
+- [ ] Add deterministic JSON and Markdown renderers for the pilot result.
+- [ ] Include evidence locations, derivation, confidence, and missing-evidence
+  labels for every finding.
+- [ ] Add a versioned local sidecar for user confirmations, corrections,
+  categories, outcomes, and notes.
+- [ ] Generate suggested AGENTS.md, project-memory, cache-entry, or skill
+  text from deterministic templates; never write those targets automatically.
+- [ ] Add redaction-safe fixtures and tests for report and sidecar stability.
+
+Dependencies: P1A-3.
+
+### P1A-5 - Add an experimental CLI and validate the pilot
+
+- [ ] Add an explicit experimental CLI command and input-path option while
+  preserving all existing CLI behavior.
+- [ ] Keep analysis offline and make content analysis unavailable in this
+  release.
+- [ ] Document the evidence boundary, privacy behavior, limitations, and exact
+  meaning of “first observed successful repository mutation”.
+- [ ] Validate on at least ten local tasks or sessions, record whether a
+  finding changes a real workflow decision, and publish no claims beyond the
+  observed evidence.
+
+Dependencies: P1A-4.
+
 ## Low priority / structural improvements v0.1.x
 
 ### L1 - Introduce typed usage records
@@ -514,7 +590,8 @@ Proposed versions are provisional and scope-driven rather than date-driven:
 | Stage | Proposed version | Release meaning |
 | --- | --- | --- |
 | Current baseline | `v0.1.1` | Hardened local provider-specific CLI |
-| Product milestone 1 | `v0.2.0` | Experimental local task-intelligence validation |
+| Product milestone 1a | `v0.2.0` | Deterministic local waste-signature validation |
+| Product milestone 1b | `v0.2.1` | Opt-in message-content intelligence validation |
 | Product milestone 2 | `v0.3.0` | Reusable typed analysis boundary informed by the pilot |
 | Product milestone 3 | `v0.3.1` | Unified local analysis and deterministic JSON |
 | Product milestone 4 | `v0.3.2` | Self-contained HTML and redacted export bundles |
@@ -526,17 +603,16 @@ Proposed versions are provisional and scope-driven rather than date-driven:
 stable local workflow and data schema, documented compatibility guarantees,
 and repeatable release evidence; it does not require a SaaS product.
 
-### Product milestone 1 - Validate task intelligence locally (`v0.2.0`)
+### Product milestone 1a - Validate deterministic waste signatures (`v0.2.0`)
 
-This milestone tests the product idea before BurnRate commits to a broad
-analysis-engine refactor. It is an intentionally provisional, local-only
-vertical slice built on the trustworthy v0.1.1 parser and pricing behavior.
-Some duplicated or provider-specific experimental code is acceptable when it
-keeps the validation work small and reversible.
+This high-priority pilot tests the privacy-preserving version of the product
+idea before BurnRate commits to a broad analysis-engine refactor. It uses
+structured traces only, does not inspect natural-language message bodies, and
+does not call another LLM. Provider-specific experimental code is acceptable
+when it keeps validation work small and reversible.
 
-- [ ] Start with the provider whose logs contain the most representative task
-  history; add the second provider only if needed to answer a validation
-  question.
+- [ ] Start with Codex structured traces; add the second provider only if it
+  answers a validation question that Codex cannot.
 - [ ] Read provider logs without modifying them and extract the minimum
   session, request, timestamp, model, token, cost, retry, error, and tool-use
   evidence that the source actually exposes.
@@ -568,12 +644,40 @@ Completion criteria:
 - If the experiment does not produce actionable signal, it can be revised or
   removed without first completing L1, L3, or a common-schema refactor.
 
+### Product milestone 1b - Validate opt-in content intelligence (`v0.2.1`)
+
+Start only when 1a demonstrates value and a specific unanswered question
+requires natural-language content. It is disabled by default, local and
+inspectable, and begins with deterministic text analysis rather than another
+LLM.
+
+- [ ] Read only the selected minimum user and agent message bodies and report
+  exactly which fields were inspected.
+- [ ] Identify repeated investigative questions and similar work using
+  deterministic matching and similarity measures with user-reviewable evidence.
+- [ ] Produce low-confidence, user-confirmable candidates for scope drift,
+  overengineering, semantic subagent duplication, and recurring knowledge.
+- [ ] Keep any LLM-assisted classifier or synthesis as an optional, separately
+  measured adapter that can be compared to and disabled from the deterministic
+  baseline.
+
+Completion criteria:
+
+- Content analysis is disabled by default and its findings are distinguished
+  from structured-trace findings.
+- Users can inspect, correct, or reject every message-derived candidate.
+- At least one message-derived finding supplies actionable signal that 1a
+  could not produce; otherwise it is not promoted into the supported path.
+- No instruction, memory, cache, or skill file is changed without approval.
+
 ### Product milestone 2 - Complete the reusable analysis boundary (`v0.3.0`)
 
 Start this milestone only after the v0.2.0 experiment demonstrates useful
-task-level signal. The pilot should determine the durable record granularity,
-provenance, evidence-availability, task-identity, outcome, and pricing fields
-instead of having those fields designed speculatively.
+deterministic signal. Incorporate v0.2.1 findings only if opt-in content
+analysis supplies additional actionable value. The pilots should determine the
+durable record granularity, provenance, evidence-availability, task identity,
+outcome, waste-signature, and pricing fields instead of designing them
+speculatively.
 
 Before the broad extraction, complete L6 through L9 so isolated tests, Ruff,
 CI, package checks, and distribution metadata protect the refactor. These
