@@ -60,3 +60,5 @@ tempfiles/
 # Cache directories
 */__pycache__/
 */.pytest_cache/
+# Local historical planning archive
+tempfiles/HISTORIC_PLAN.md
