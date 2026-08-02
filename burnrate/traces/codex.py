@@ -222,6 +222,8 @@ def _add_output_fields(event, output):
             break
     if output.get("error_evidence"):
         event["error_evidence"] = output["error_evidence"]
+    if output.get("error_fingerprint"):
+        event["error_fingerprint"] = output["error_fingerprint"]
 
 
 def _output_envelope(value):
@@ -234,12 +236,22 @@ def _output_envelope(value):
     status = int(match.group(1))
     return {
         "exit_status": status,
+        "error_fingerprint": _error_fingerprint(value),
         "error_evidence": (
             "stderr-present"
             if re.search(r"(?i)\bstderr\b|\bcommand failed\b", value)
             else None
         ),
     }
+def _error_fingerprint(value):
+    """Extract a stable error category, never the output body."""
+    text = value.lower()
+    patterns = [(r"already checkpointed|duplicate checkpoint", "duplicate-checkpoint"), (r"no such column|operationalerror", "schema-query-error"), (r"cannot find path|no such file|not found", "missing-path"), (r"syntaxerror|unterminated|terminator|not recognized", "shell-parse-error"), (r"zero .*cards parsed|no .*cards parsed", "zero-cards-parsed")]
+    for pattern, label in patterns:
+        if re.search(pattern, text):
+            return label
+    return None
+
 def _token_snapshot(value):
     if not isinstance(value, Mapping):
         return {}

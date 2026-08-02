@@ -1,6 +1,8 @@
 """Deterministic waste-signature analysis for normalized Codex traces."""
 
 from collections import defaultdict
+import hashlib
+import re
 from datetime import datetime, timezone
 
 from .normalize import normalize_events
@@ -20,6 +22,7 @@ class CodexWasteAnalyzer:
         findings.extend(_repeated_discovery(timeline))
         findings.extend(_mutation_aware_repetition(timeline))
         findings.extend(_recurring_failures(timeline))
+        findings.extend(_automation_failure_episodes(timeline))
         findings.extend(_tokens_before_mutation(timeline))
         findings.extend(_duplicate_subagent_work(timeline))
         return {"findings": findings}
@@ -198,6 +201,95 @@ def _recurring_failures(events):
         ))
     return findings
 
+
+def _automation_failure_episodes(events):
+    """Correlate repeated structured failures into privacy-bounded episodes."""
+    groups = defaultdict(list)
+    for event in events:
+        normalized = event.get("normalized", {})
+        status = normalized.get("exit_status")
+        command = normalized.get("command")
+        signature_command = _episode_command_key(command)
+        evidence = normalized.get("error_fingerprint") or normalized.get("error_text") or normalized.get("error_evidence") or "exit-status-only"
+        if event.get("event_type") != "tool_output" or not command:
+            continue
+        if not isinstance(status, str) or not status.startswith("failure:"):
+            continue
+        groups[(signature_command, status, evidence)].append(event)
+
+    findings = []
+    for (command, status, error), evidence in groups.items():
+        sessions = _sessions(evidence)
+        if len(evidence) < 2 or len(sessions) < 2:
+            continue
+        episode_type = _episode_type(command, error)
+        overlap = _sessions_overlap(evidence)
+        confidence = "high" if overlap else "medium"
+        later_success = _later_success(events, evidence)
+        findings.append(_finding(
+            "automation_failure_episode",
+            "observed",
+            confidence,
+            "Repeated structured failure across distinct runs; confidence is high only when run timestamps overlap.",
+            evidence,
+            episode_type=episode_type,
+            operation="automation",
+            command_signature="cmd-" + hashlib.sha256(command.encode("utf-8")).hexdigest()[:12],
+            exit_status=status,
+            error_evidence="error-text-present" if error != "exit-status-only" else "exit-status-only",
+            error_fingerprint="err-" + hashlib.sha256(error.encode("utf-8")).hexdigest()[:12],
+            run_count=len(sessions),
+            sessions=sessions,
+            recovery="later_success_observed" if later_success else "none_observed",
+            terminal_status="success_after_failure" if later_success else "failure_or_unknown",
+            time_window=_time_window(evidence),
+        ))
+    return findings
+
+
+def _episode_command_key(command):
+    """Collapse dated import filenames for cross-run comparison."""
+    return re.sub(r"(gmail|linkedin)-\d{4}-\d{2}-\d{2}", r"\1-<date>", command or "")
+
+def _episode_type(command, error):
+    text = (command + " " + error).lower()
+    if "checkpoint" in text or "validate-import" in text or "already" in text and "import" in text:
+        return "duplicate_checkpoint_import"
+    if "no such file" in text or "cannot find path" in text or "not found" in text or "missing-path" in text or "$env:codex_home" in text or "<home>/automations" in text:
+        return "stale_or_missing_path"
+    if "no such column" in text or "operationalerror" in text or "schema-query-error" in text:
+        return "schema_query_mismatch"
+    if "syntaxerror" in text or "unterminated" in text or "not recognized" in text or "terminator" in text or "shell-parse-error" in text:
+        return "shell_quoting_failure"
+    return "recurring_command_failure"
+
+
+def _sessions_overlap(events):
+    times = [_parsed_time(event) for event in events]
+    times = [time for time in times if time is not None]
+    return bool(times) and (max(times) - min(times)).total_seconds() <= 30 * 60
+
+
+def _later_success(all_events, failures):
+    failure_sessions = set(_sessions(failures))
+    last_failure = max((_parsed_time(event) for event in failures if _parsed_time(event)), default=None)
+    if last_failure is None:
+        return False
+    return any(
+        event.get("event_type") == "tool_output"
+        and event.get("normalized", {}).get("exit_status") == "success"
+        and event.get("normalized", {}).get("session_id") in failure_sessions
+        and (_parsed_time(event) or last_failure) > last_failure
+        and any(token in (event.get("normalized", {}).get("command") or "").lower() for token in ("audit", "report", "summary"))
+        for event in all_events
+    )
+
+
+def _time_window(events):
+    times = sorted(time for time in (_parsed_time(event) for event in events) if time is not None)
+    if not times:
+        return None
+    return {"start": times[0].isoformat(), "end": times[-1].isoformat()}
 
 def _tokens_before_mutation(events):
     by_session = defaultdict(list)

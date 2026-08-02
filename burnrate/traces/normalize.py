@@ -50,6 +50,7 @@ class CodexTraceNormalizer:
             "read_path": normalize_path(event.get("read_path") or extract_read_path(event.get("command"))),
             "exit_status": normalize_exit_status(event.get("exit_status")),
             "error_text": normalize_error_text(event.get("error_text")),
+            "error_fingerprint": _normal_string(event.get("error_fingerprint")),
             "error_evidence": _normal_string(event.get("error_evidence")),
             "mutation_status": _normal_string(event.get("mutation_status")),
         }

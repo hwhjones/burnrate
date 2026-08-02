@@ -362,18 +362,27 @@ Dependencies: P1A-1.
   changes a real workflow decision before calling these patterns validated
   waste signatures.
 
+- [x] Add deterministic automation-failure episodes that correlate run overlap,
+  checkpoint/import rejection, stale paths, schema/query errors, shell quoting
+  failures, interrupted runs, and misleading successful terminal status.
+- [x] Store only normalized episode signatures, operation, exit status, error
+  fingerprint, timing, recovery, terminal outcome, and source locations; never
+  retain Gmail IDs, message bodies, email addresses, or raw tool output.
+- [x] Add anonymized fixtures and live-log review tests proving failure episodes
+  remain traceable without exposing provider identifiers or natural-language content.
+
 Dependencies: P1A-2.
 
 ### P1A-4 - Produce a local report, sidecar, and instruction candidates
 
-- [ ] Add deterministic JSON and Markdown renderers for the pilot result.
-- [ ] Include evidence locations, derivation, confidence, and missing-evidence
+- [x] Add deterministic JSON and Markdown renderers for the pilot result.
+- [x] Include evidence locations, derivation, confidence, and missing-evidence
   labels for every finding.
-- [ ] Add a versioned local sidecar for user confirmations, corrections,
+- [x] Add a versioned local sidecar for user confirmations, corrections,
   categories, outcomes, and notes.
-- [ ] Generate suggested AGENTS.md, project-memory, cache-entry, or skill
+- [x] Generate suggested AGENTS.md, project-memory, cache-entry, or skill
   text from deterministic templates; never write those targets automatically.
-- [ ] Add redaction-safe fixtures and tests for report and sidecar stability.
+- [x] Add redaction-safe fixtures and tests for report and sidecar stability.
 
 Dependencies: P1A-3.
 
@@ -629,7 +638,7 @@ structured traces only, does not inspect natural-language message bodies, and
 does not call another LLM. Provider-specific experimental code is acceptable
 when it keeps validation work small and reversible.
 
-- [ ] Start with Codex structured traces; add the second provider only if it
+- [x] Start with Codex structured traces; add the second provider only if it
   answers a validation question that Codex cannot.
 - [ ] Read provider logs without modifying them and extract the minimum
   session, request, timestamp, model, token, cost, retry, error, and tool-use
@@ -643,9 +652,9 @@ when it keeps validation work small and reversible.
 - [ ] Generate a simple deterministic JSON or Markdown report that compares
   transparent task metrics; do not create a composite efficiency or
   model-quality score.
-- [ ] Mark every reported value as observed, derived, user-supplied,
+- [x] Mark every reported value as observed, derived, user-supplied,
   heuristically inferred, or unavailable where that distinction matters.
-- [ ] Record whether each report observation changes or informs a concrete
+- [x] Record whether each report observation changes or informs a concrete
   model, prompting, context, tool, or task-decomposition decision.
 
 Completion criteria:
