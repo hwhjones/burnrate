@@ -1,0 +1,7 @@
+{"type":"session_meta","timestamp":"2026-08-02T09:00:00Z","payload":{"id":"session-envelope-01"}}
+{"type":"response_item","timestamp":"2026-08-02T09:00:01Z","payload":{"type":"function_call","call_id":"call-success","name":"shell_command","arguments":"{\"command\":\"pytest tests/unit.py\",\"workdir\":\"C:/work/project\"}"}}
+{"type":"response_item","timestamp":"2026-08-02T09:00:02Z","payload":{"type":"function_call_output","call_id":"call-success","output":"exit code: 0\nstdout: SENTINEL_SUCCESS_BODY_MUST_NOT_SURVIVE"}}
+{"type":"response_item","timestamp":"2026-08-02T09:01:01Z","payload":{"type":"function_call","call_id":"call-fail","name":"shell_command","arguments":"{\"command\":\"pytest tests/unit.py\",\"workdir\":\"C:/work/project\"}"}}
+{"type":"response_item","timestamp":"2026-08-02T09:01:02Z","payload":{"type":"function_call_output","call_id":"call-fail","output":"exit code: 1\nstderr: SENTINEL_FAILURE_BODY_MUST_NOT_SURVIVE"}}
+{"type":"response_item","timestamp":"2026-08-02T09:02:01Z","payload":{"type":"function_call","call_id":"call-fail-again","name":"shell_command","arguments":"{\"command\":\"pytest tests/unit.py\",\"workdir\":\"C:/work/project\"}"}}
+{"type":"response_item","timestamp":"2026-08-02T09:02:02Z","payload":{"type":"function_call_output","call_id":"call-fail-again","output":"exit code: 1\nstderr: SENTINEL_FAILURE_BODY_MUST_NOT_SURVIVE"}}

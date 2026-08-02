@@ -305,44 +305,62 @@ message bodies or calling another LLM. All source logs remain read-only.
 
 ### P1A-1 - Add a Codex structured-trace reader and fixtures
 
-- [ ] Add an experimental, provider-specific Codex event reader separate from
+- [x] Add an experimental, provider-specific Codex event reader separate from
   the existing token-and-cost parser; do not refactor the v0.1.1 parser path.
-- [ ] Retain only structured event fields required for the pilot: session and
+- [x] Retain only structured event fields required for the pilot: session and
   agent lineage, timestamp, event type, token snapshot, tool name, command,
   path, exit status, error text, and patch/mutation status.
-- [ ] Explicitly discard natural-language user, agent, and reasoning bodies.
-- [ ] Add representative anonymized fixtures covering tool calls, tool outputs,
+- [x] Explicitly discard natural-language user, agent, and reasoning bodies.
+- [x] Add representative anonymized fixtures covering tool calls, tool outputs,
   token counts, patches, failed commands, and absent or malformed fields.
-- [ ] Add focused tests proving message bodies are not retained in the
+- [x] Add focused tests proving message bodies are not retained in the
   experimental result.
 
 Dependencies: v0.1.1 release verification.
 
 ### P1A-2 - Add deterministic normalization and evidence signatures
 
-- [ ] Normalize commands, paths, volatile IDs, timestamps, exit statuses, and
+- [x] Normalize commands, paths, volatile IDs, timestamps, exit statuses, and
   error text into stable, inspectable signatures.
-- [ ] Classify structured operations as discovery, read, test, mutation,
+- [x] Classify structured operations as discovery, read, test, mutation,
   authentication, version-control, or unknown using explicit rules.
-- [ ] Preserve raw source location and normalized values so every result can
+- [x] Preserve raw source location and normalized values so every result can
   be traced and challenged.
-- [ ] Add exact-match and volatile-value normalization tests; do not use
+- [x] Add exact-match and volatile-value normalization tests; do not use
   embeddings or an LLM.
 
 Dependencies: P1A-1.
 
 ### P1A-3 - Detect deterministic waste signatures
 
-- [ ] Detect repeated command attempts and repeated repository-discovery
-  operations within and across sessions.
-- [ ] Fingerprint recurring failures from normalized command, exit status, and
-  error evidence.
-- [ ] Attribute token snapshots to the timeline and calculate tokens consumed
-  before the first observed successful repository mutation.
-- [ ] Detect probable duplicated subagent work only when lineage, timing,
-  command, path, or patch-overlap evidence supports it.
-- [ ] Label every result as observed, derived, heuristic, or unavailable and
-  include a confidence rule rather than a composite score.
+- [x] Produce preliminary execution-pattern candidates for repeated commands,
+  repeated discovery, token-before-mutation, recurring failures, and possible
+  duplicate subagent work; do not present these candidates as waste findings.
+- [x] Parse Codex's execution-outcome envelope only far enough to retain exit
+  status and a normalized failure fingerprint, then discard its raw body.
+- [x] Extract read targets only from recognized structured tool arguments or
+  conservative command forms; retain the path but never source-file content.
+- [x] Detect potentially avoidable repetition only when the same read,
+  successful command, failed command, or complete repository discovery occurs
+  without an observed relevant mutation in between. State the result as "no
+  observed mutation", not proof that no external change occurred.
+- [x] Attribute token snapshots to the timeline and calculate tokens consumed
+  before the first observed successful repository mutation; label the result
+  as orientation evidence rather than waste until a validated intervention
+  shows it is avoidable.
+- [x] Detect probable duplicated subagent work only when explicit lineage plus
+  timing, command, path, or patch-overlap evidence supports it; leave the
+  result unavailable when lineage is absent.
+- [x] Label every result as observed, derived, heuristic, or unavailable and
+  include an explicit confidence rule rather than a composite score. Missing
+  exit status, mutation, lineage, or task-grouping evidence is unavailable,
+  never a negative finding.
+- [x] Add privacy-safe fixtures for successful and failed non-JSON outcome
+  envelopes, repeated reads, unchanged retries, and mutation boundaries, with
+  focused assertions that raw bodies are not retained.
+- [x] Manually review at least ten live-log candidates and record whether each
+  changes a real workflow decision before calling these patterns validated
+  waste signatures.
 
 Dependencies: P1A-2.
 

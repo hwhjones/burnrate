@@ -55,6 +55,7 @@ tempfiles/
 
 # JSONL files (log files)
 *.jsonl
+!tests/fixtures/**/*.jsonl
 
 # Cache directories
 */__pycache__/

@@ -1,0 +1,14 @@
+{"type":"session_meta","timestamp":"2026-08-02T08:00:00Z","payload":{"id":"session-anon-01","base_instructions":"SENTINEL_SYSTEM_BODY_MUST_NOT_SURVIVE"}}
+{"type":"event_msg","timestamp":"2026-08-02T08:00:01Z","payload":{"type":"user_message","message":"SENTINEL_USER_BODY_MUST_NOT_SURVIVE"}}
+{"type":"response_item","timestamp":"2026-08-02T08:00:02Z","payload":{"type":"reasoning","content":"SENTINEL_REASONING_BODY_MUST_NOT_SURVIVE"}}
+{"type":"event_msg","timestamp":"2026-08-02T08:00:03Z","payload":{"type":"agent_message","message":"SENTINEL_AGENT_BODY_MUST_NOT_SURVIVE"}}
+{"type":"response_item","timestamp":"2026-08-02T08:00:04Z","agent_id":"agent-child-01","parent_agent_id":"agent-root-01","payload":{"type":"function_call","call_id":"call-list","name":"shell_command","arguments":"{\"command\":\"rg --files\",\"workdir\":\"C:/work/project\"}"}}
+{"type":"response_item","timestamp":"2026-08-02T08:00:05Z","payload":{"type":"function_call_output","call_id":"call-list","output":"{\"exit_code\":0,\"stdout\":\"SENTINEL_TOOL_OUTPUT_BODY_MUST_NOT_SURVIVE\"}"}}
+{"type":"event_msg","timestamp":"2026-08-02T08:00:06Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":120,"cached_input_tokens":20,"output_tokens":40,"reasoning_output_tokens":12,"total_tokens":160}}}}
+{"type":"response_item","timestamp":"2026-08-02T08:00:07Z","payload":{"type":"function_call","call_id":"call-fail","name":"shell_command","arguments":"{\"command\":\"git status\",\"workdir\":\"C:/work/project\"}"}}
+{"type":"response_item","timestamp":"2026-08-02T08:00:08Z","payload":{"type":"function_call_output","call_id":"call-fail","output":"{\"exit_status\":1,\"stderr\":\"repository unavailable\"}"}}
+{"type":"event_msg","timestamp":"2026-08-02T08:00:09Z","payload":{"type":"patch_apply_end","success":true,"changes":{"C:/work/project/burnrate/traces/codex.py":"SENTINEL_PATCH_BODY_MUST_NOT_SURVIVE"}}}
+{"type":"response_item","timestamp":"2026-08-02T08:00:10Z","payload":{"type":"function_call","call_id":"call-missing","name":"shell_command","arguments":"not-json"}}
+{"type":"event_msg","timestamp":"2026-08-02T08:00:11Z","payload":{"type":"token_count","info":[]}}
+not valid json
+[]
