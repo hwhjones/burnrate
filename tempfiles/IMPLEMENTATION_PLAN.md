@@ -22,8 +22,10 @@ Proposed versions are provisional and scope-driven rather than date-driven:
 | --- | --- | --- |
 | Product milestone 1b | `v0.2.1` | Opt-in content evidence in the existing trace stream |
 | Product milestone 1c | `v0.2.2` | Deterministic message-to-execution correlation |
-| Product milestone 1d | `v0.2.3` | Expanded rule catalog and meaningful-insight validation |
-| Product milestone 1e | `v0.2.4` | Operationalize validated insights through the experimental CLI |
+| Product milestone 1d | `v0.2.3` | Validate high-signal execution candidates |
+| Product milestone 1e | `v0.2.4` | Consolidate trustworthy habit insights |
+| Product milestone 1f | `v0.2.5` | Calibrate lower-signal context candidates |
+| Product milestone 1g | `v0.2.6` | Operationalize validated insights through the experimental CLI |
 | Product milestone 2 | `v0.3.0` | Reusable typed analysis boundary informed by the pilots |
 | Product milestone 3 | `v0.3.1` | Unified local analysis and deterministic JSON |
 | Product milestone 4 | `v0.3.2` | Self-contained HTML and redacted export bundles |
@@ -41,20 +43,20 @@ Extend the existing trace pipeline rather than creating a parallel content
 product. Content interrogation is explicit and local; the default trace path
 continues to discard natural-language bodies.
 
-- [ ] Add an explicit content-analysis option to `CodexTraceReader` and emit
+- [x] Add an explicit content-analysis option to `CodexTraceReader` and emit
   user-message and agent-message events into the existing ordered trace stream.
-- [ ] Retain only selected message text plus existing session, timestamp, agent
+- [x] Retain only selected message text plus existing session, timestamp, agent
   lineage, role, event type, and source location; publish an inspection
   manifest listing every source field read.
-- [ ] Extend `normalize_events()` to normalize message whitespace, volatile
+- [x] Extend `normalize_events()` to normalize message whitespace, volatile
   identifiers, timestamps, paths, and likely secrets, then attach a stable
   content fingerprint and deterministic token features.
-- [ ] Preserve existing command, path, exit, error, mutation, and evidence
+- [x] Preserve existing command, path, exit, error, mutation, and evidence
   signatures unchanged when content analysis is disabled.
-- [ ] Keep raw message text in memory only for the opted-in analysis run;
+- [x] Keep raw message text in memory only for the opted-in analysis run;
   default JSON and Markdown output must remain body-free and use source
   locations, fingerprints, and explicitly requested review excerpts.
-- [ ] Add privacy-safe fixtures covering user and agent messages, malformed
+- [x] Add privacy-safe fixtures covering user and agent messages, malformed
   content, redaction, stable fingerprints, inspection manifests, and the
   unchanged content-disabled path.
 
@@ -71,23 +73,23 @@ Completion criteria:
 Use message content to explain structured activity: what request or plan led to
 which reads, searches, failures, mutations, tests, and subagent work.
 
-- [ ] Segment the unified timeline into reviewable work episodes using explicit
+- [x] Segment the unified timeline into reviewable work episodes using explicit
   user requests, agent hand-offs, idle gaps, repository/workdir changes, and
   terminal mutation or test evidence; expose every boundary rule.
-- [ ] Implement a deterministic similarity ladder: exact normalized
+- [x] Implement a deterministic similarity ladder: exact normalized
   fingerprint, containment, identifier-aware token overlap, character n-grams,
   and local BM25/TF-IDF matching. Exclude greetings, acknowledgements, quoted
   tool output, and other low-information boilerplate.
-- [ ] Correlate similar messages with normalized commands, paths, error
+- [x] Correlate similar messages with normalized commands, paths, error
   fingerprints, tool sequences, mutations, tests, timestamps, and agent
   lineage from the same event stream.
-- [ ] Add high-precision candidates for repeated investigation without
+- [x] Add high-precision candidates for repeated investigation without
   progress, ineffective retry loops, and probable semantic subagent
   duplication. Require multiple independent signals and explicit exclusions.
-- [ ] Extend the existing finding format and sidecar review flow with
+- [x] Extend the existing finding format and sidecar review flow with
   `evidence_kind` (`structured`, `content`, or `combined`), matching rule,
   shared anchors, boundary evidence, and confirm/reject/correct decisions.
-- [ ] Add deterministic fixtures for exact and near matches, legitimate repeated
+- [x] Add deterministic fixtures for exact and near matches, legitimate repeated
   work after mutation, generic-message suppression, changed task context, and
   missing-evidence outcomes.
 
@@ -99,74 +101,185 @@ Completion criteria:
 - Users can reject or correct every episode boundary and candidate without
   changing provider logs.
 
-### Product milestone 1d - Expand and validate the waste-analysis catalog (`v0.2.3`)
+### Product milestone 1d - Validate high-signal execution candidates (`v0.2.3`)
 
-Turn the integrated evidence model into a high-precision, explainable catalog.
-This milestone validates insight quality; it does not create a composite waste
-or model-quality score.
+Validate the small set of candidates with the clearest observable relationship
+between repeated activity and missing progress. This milestone does not call a
+candidate waste, assign a score, or recommend an intervention before a user
+has reviewed the evidence.
 
-- [ ] Define stable rule IDs with required evidence, exclusions, derivation,
-  confidence, unavailable conditions, and one narrowly scoped remediation.
-- [ ] Add progress-aware rules for output that has no observed downstream use,
-  repeated knowledge retrieval, test churn, failure-and-recovery episodes,
-  cache/context churn, reopened resolved work, and duplicated exploration.
-- [ ] Track transparent metrics separately: token exposure, output size,
-  retries, repeated operations, elapsed time, cache changes, mutations, and
-  test outcomes. Never assign fixed per-hit waste tokens or combine them into
-  a grade.
-- [ ] Add per-user and per-repository baselines for comparison while retaining
-  the raw current value, baseline window, evidence availability, and sample
-  size.
-- [ ] Record user verdicts (`avoidable`, `intentional`, `inconclusive`, or
-  `false_positive`) and use them to tune explicit local thresholds rather than
-  training or calling an external model.
-- [ ] Review at least twenty candidates across at least ten representative
-  local tasks or sessions, including successful, partial, and failed work.
-  Record whether each candidate informs a concrete prompting, context, tool,
-  retry, delegation, or task-decomposition decision.
+#### Candidate numbering schema
+
+Candidate IDs use `C1<stage>-<domain>-<sequence>`: `stage` is `D` or `F`,
+`domain` is `RET` (retry), `READ` (knowledge retrieval), `TEST` (test), or
+`EXP` (exploration), and `sequence` is a two-digit stable rule number. A
+candidate record must state its required evidence, exclusions, derivation,
+confidence, unavailable conditions, transparent metrics, and a possible
+intervention that is visible only after confirmation.
+
+| ID | Candidate pattern | Why it belongs in 1d | Possible intervention after confirmation only |
+| --- | --- | --- | --- |
+| C1D-READ-01 | Re-reading the same file without relevant mutation | Direct path, mutation, and timing evidence; already validated by the trace pipeline. | Reference the earlier read when its evidence remains current. |
+| C1D-RET-01 | Ineffective retry loop | Requires the same normalized failure/command plus no intervening progress. | Change the approach before repeating the same attempt. |
+| C1D-TEST-01 | Test churn without relevant mutation | Test outcomes and mutations are structured, local evidence. | Make or inspect a relevant change before retesting. |
+| C1D-EXP-01 | Duplicated exploration, including semantic sibling-subagent overlap | Requires multiple independent lineage, message, and execution signals. | Narrow or divide the investigative scope. |
+
+- [x] Define the stable candidate schema and render all required evidence,
+  exclusions, unavailable conditions, and possible interventions separately.
+- [x] Implement progress-aware rules for `C1D-READ-01`, `C1D-RET-01`,
+  `C1D-TEST-01`, and `C1D-EXP-01`; require multiple independent signals and
+  explicit progress exclusions for every candidate.
+- [x] Track transparent metrics separately: token exposure, retries, repeated
+  operations, elapsed time, mutations, and test outcomes. Never assign fixed
+  per-hit waste tokens or combine metrics into a grade.
+- [x] Record user verdicts (`avoidable`, `intentional`, `inconclusive`, or
+  `false_positive`) and use them only to tune explicit local thresholds.
+
 
 Completion criteria:
 
-- At least one evidence-backed candidate changes or materially informs a real
-  workflow decision; otherwise the catalog is revised or not promoted.
-- Confirmed false positives and intentional repetitions are documented and
-  reflected in rule exclusions or thresholds.
-- Reports rank or filter findings only by transparent dimensions such as
-  observed token exposure, recurrence, and confidence; never by a composite
-  score.
+- No candidate is reported as a waste claim before review; intentional or
+  inconclusive work remains visibly distinct from avoidable work.
+- At least one reviewed high-signal candidate materially informs a real
+  workflow decision, or the rule is revised or not promoted.
+- Confirmed false positives and intentional repetitions become documented rule
+  exclusions or threshold changes.
 
-### Product milestone 1e - Operationalize validated insights (`v0.2.4`)
+### Product milestone 1e - Consolidate trustworthy habit insights (`v0.2.4`)
 
-Start only when milestone 1d produces meaningful, reviewable insight. If it
-does not, archive the experimental analysis instead of shipping an unsupported
-workflow. This milestone owns the residual P1A-5 work.
+Turn high-signal trace evidence into task-local habit summaries before adding the
+CLI. Keep detailed evidence available on demand.
+
+- [x] Scope and deduplicate each occurrence by repository, corrected task
+  episode, and normalized target; preserve mutation, test, and changed-context
+  exclusions.
+- [x] Use exact or identifier-aware message matches with shared execution
+  anchors. One detector owns each stable rule; other signals enrich it.
+- [x] Make core metrics reproducible from distinct events and bounded deltas,
+  including attempts, retries, token exposure, and output size. Keep unavailable
+  evidence separate from detections.
+- [x] Emit a deterministic summary with count, affected scope, confidence, one
+  example, and a qualified `try_next_experiment`; validate it against the
+  twenty-day log and reconcile the earlier 33 raw candidates.
+  - [x] Prevent experimental containment, character n-gram, and BM25 matches from
+  reaching any production candidate path, including semantic sibling-subagent
+  detection; add regression fixtures for each excluded rule.
+  - [x] Keep raw observations and deduplicated candidate occurrences distinct in
+  JSON and Markdown. An explicitly empty candidate list must remain zero and
+  must never fall back to raw findings.
+  - [x] Derive summary metrics from unique source events across all clustered
+  occurrences rather than adding per-occurrence totals that may overlap.
+  - [x] Calculate review coverage from current deduplicated candidate IDs only;
+  exclude stale, unrelated, and duplicate sidecar decisions from the gate.
+  - [x] Enforce the intervention contract consistently: either hide possible
+  interventions until confirmation or expose only an explicitly qualified,
+  pre-review `try_next_experiment` in every output format.
+
+Completion criteria:
+
+- No cross-task repetition or pairwise duplicate is reported as a separate
+  missing-progress candidate.
+- Summary numbers are reproducible, unavailable evidence is explicit, and
+  full source evidence remains available on demand.
+- Experimental similarity rules cannot create candidates through any detector.
+- JSON and Markdown agree on candidate totals, including the zero-candidate
+  case, while retaining separately named raw-observation totals.
+- Clustered summary metrics count every distinct source event at most once.
+- Review coverage cannot be satisfied by stale or duplicated sidecar records,
+  and unreviewed output never presents an intervention as confirmed advice.
+
+### Product milestone 1f - Calibrate lower-signal context candidates (`v0.2.5`)
+
+Extend the catalog only after 1e establishes trustworthy high-signal summaries
+and the review workflow is useful. These patterns need broader task context,
+output-use evidence, or baselines, so they remain candidates or
+frequency/context signals until reviewed.
+
+| ID | Candidate pattern | Evidence limitation | Possible intervention after confirmation only |
+| --- | --- | --- | --- |
+| C1F-CTX-01 | Topic drift / marathon session | Requires a validated semantic task-boundary interpretation. | Consider `/clear` or `/compact` at the reviewed boundary. |
+| C1F-CTX-02 | Compaction overrun / token pile-up | Token exposure alone does not show lost progress. | Consider manual `/compact [focus]` before the observed limit. |
+| C1F-OUT-01 | Unused verbose response | Requires output-size and downstream-use evidence. | Bound requested output when it was not used. |
+| C1F-OUT-02 | Full log or stdout flood | Requires output-size evidence and an absence-of-use interpretation. | Filter, bound, or save output before returning it. |
+| C1F-RES-01 *(signal)* | Stranded web or knowledge results | Requires a downstream-use model that remains unavailable in some traces. | Consider focused research or delegation. |
+| C1F-CACHE-01 | Cache/context discontinuity | Requires reliable cache/model/effort transitions and a baseline. | Avoid unnecessary context or model changes. |
+| C1F-EXP-02 | Main-thread exploration pile-up | Requires task-decomposition context beyond a read count. | Delegate a large independent sweep when appropriate. |
+| C1F-EXP-03 *(signal)* | Subagent overuse | Frequency/context signal only until linked to progress or downstream use. | Delegate only independent, parallelizable work. |
+
+- [x] Add progress-aware output-use, stranded-result, cache/context, reopened
+  work, and main-thread exploration rules with explicit unavailable outcomes.
+- [ ] Capture only the privacy-safe telemetry required to make each lower-signal
+  rule available, including output size, turn and repository/workdir identity,
+  cache or context transitions, compaction, web activity, and subagent counts.
+  Keep every field optional and do not retain output bodies by default.
+- [ ] Replace provisional event-count baselines with candidate-specific user
+  and repository values. Retain the raw current value, baseline window,
+  evidence availability, sample size, and comparison statistic separately;
+  keep comparisons unavailable until occurrence counts and repository identity
+  are reliable across multiple windows.
+- [x] Keep `C1F-RES-01` and `C1F-EXP-03` visibly labelled as signals; neither
+  may become a waste claim or contribute to any score.
+- [ ] Compare reviewed results against the 1d verdicts and promote only rules
+  that improve decision usefulness without unacceptable false positives. Do
+  not tune thresholds until the documented minimum verdict sample is met.
+
+Completion criteria:
+
+- Every lower-signal candidate explains its missing context or unavailable
+  evidence rather than implying waste.
+- A catalog definition with unavailable evidence is not counted as a detected
+  candidate or finding.
+- Reports rank or filter only by transparent dimensions such as observed token
+  exposure, recurrence, and confidence; never by a composite score.
+
+### Product milestone 1g - Operationalize validated insights (`v0.2.6`)
+
+Start only when milestones 1d through 1f produce meaningful, reviewable insight.
+If they do not, archive the experimental analysis instead of shipping an
+unsupported workflow. This milestone owns the residual P1A-5 work.
+
+- [ ] Review at least twenty candidates across at least ten representative
+  local tasks or sessions, including successful, partial, and failed work.
+  Record whether each candidate informed a concrete prompting, context, tool,
+  retry, delegation, or task-decomposition decision.
+  The implementation reports coverage but does not fabricate verdicts or
+  workflow decisions; current observed coverage is 0 recorded verdicts.
 
 - [ ] Add an explicit experimental CLI command and input-path/content options
   while preserving all existing CLI behavior.
 - [ ] Keep the workflow offline and prohibit external LLM or analytics calls.
-- [ ] Generate deterministic JSON and Markdown containing structured, content,
-  and combined findings, inspection manifests, evidence links, user reviews,
-  and explicit unavailable labels.
+- [ ] Generate a concise default summary of the top detected patterns with
+  counts, affected task scope, progress evidence, confidence, and qualified
+  experiments. Keep unavailable rules in a separate diagnostic section.
+- [ ] Add `--explain` and structured JSON/Markdown review output for boundaries,
+  inspection manifests, evidence links, matching diagnostics, and user reviews;
+  keep this machinery out of the default report.
 - [ ] Document the evidence and content boundaries, privacy behavior, rule
   catalog, limitations, sidecar workflow, and the exact meaning of "first
   observed successful repository mutation".
 - [ ] Validate installed console and module entry points on representative
-  local sessions and publish no effectiveness claim beyond milestone 1d's
-  reviewed evidence.
+  local sessions and publish no effectiveness claim beyond reviewed evidence.
+- [ ] Render candidate IDs, observed metrics, confidence, and possible
+  interventions as separate fields. Show detailed evidence links and confidence
+  rules only on request. Signals must remain visibly labelled and must not
+  contribute to any score or claim.
 
 Completion criteria:
 
 - The experimental CLI is opt-in, local, deterministic, and preserves the
   existing stable command behavior.
+- The default report is a short habit summary; evidence review is available
+  without becoming part of the normal scan output.
 - A user can inspect, confirm, reject, and correct every reported finding.
-- Documentation distinguishes observed activity, candidate waste, user verdict,
-  and validated workflow insight.
+- Documentation distinguishes observed activity, candidate, user verdict, and
+  validated workflow insight.
 
 ### Product milestone 2 - Complete the reusable analysis boundary (`v0.3.0`)
 
 Start this milestone only after milestone 1d demonstrates useful, reviewable
-waste-analysis signal and milestone 1e operationalizes the validated local
-workflow. The pilots should determine the
+waste-analysis signal, milestone 1e produces trustworthy aggregated insights,
+and milestone 1g operationalizes the validated local workflow. The pilots
+should determine the
 durable record granularity, provenance, evidence-availability, task identity,
 outcome, waste-signature, and pricing fields instead of designing them
 speculatively.

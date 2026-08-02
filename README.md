@@ -12,12 +12,13 @@ BurnRate is a small, dependency-free Python utility that parses Codex and Claude
 - Report unsupported pricing conditions as unpriced instead of guessing.
 - Read ordinary and BOM-prefixed UTF-8 JSONL files.
 
-## What's new in 0.1.1
+## What's new in 0.2.3
 
 - Hardened token, identity, session-deduplication, and malformed-record handling.
 - Added resilient filesystem diagnostics and meaningful CLI exit statuses.
 - Verified API-equivalent USD rates and made unpriced or partial estimates visible.
 - Corrected build metadata and unified runtime and distribution version reporting.
+- Added deterministic, opt-in message-to-execution correlation and review-first candidate catalog for local Codex trace review.
 
 Known limitation: conditional pricing variants and Codex subscription credits are
 not calculated; estimates use the documented standard API-rate assumptions below.
@@ -93,6 +94,17 @@ Malformed and unusable records are counted by category. Rejected usage-like
 records mark token totals as potentially incomplete. Unreadable files and
 directory-discovery errors are reported by path; successfully parsed files are
 retained and the scan is marked incomplete.
+
+## Experimental trace correlation
+
+The structured trace pilot is local and opt-in. `CodexTraceReader.parse()` is
+body-free by default; pass `include_content=True` only for a local review run.
+`CodexWasteAnalyzer` exposes source-linked episodes, documented boundary rules,
+a deterministic similarity ladder, and high-precision combined candidates.
+Reports and sidecars retain source locations and normalized evidence only, not
+message bodies. Reviewers can record candidate decisions and confirm, reject,
+or correct inferred episode boundaries with `record_episode_review()`.
+
 
 ## Cost estimates
 

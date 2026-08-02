@@ -19,6 +19,19 @@ _WINDOWS_HOME = re.compile(r"^[a-z]:/users/[^/]+", re.IGNORECASE)
 _POSIX_HOME = re.compile(r"^/home/[^/]+")
 
 
+_SECRET = re.compile(
+    r"(?i)\b(?:sk-[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|bearer\s+[a-z0-9._~-]{8,})\b"
+)
+_MESSAGE_TOKEN = re.compile(r"[a-z0-9_][a-z0-9_.:/-]*")
+_LOW_INFORMATION_MESSAGE = re.compile(
+    r"^(?:hi|hello|hey|thanks|thank you|ok|okay|got it|sounds good|please|sure|yes|no)[!. ]*$",
+    re.IGNORECASE,
+)
+_QUOTED_TOOL_OUTPUT = re.compile(
+    r"(?i)^(?:```|\$\s|exit code\s*:|stdout\s*:|stderr\s*:|command failed\b|traceback\b)"
+)
+
+
 class CodexTraceNormalizer:
     """Add deterministic, inspectable evidence signatures to trace events.
 
@@ -38,6 +51,7 @@ class CodexTraceNormalizer:
     def normalize_event(self, event: dict) -> dict:
         """Copy one event and add its classification and evidence signature."""
         result = deepcopy(event)
+        content_features = normalize_message(event.get("message_text"))
         normalized = {
             "session_id": self._identity("session", event.get("session_id")),
             "agent_id": self._identity("agent", event.get("agent_id")),
@@ -53,6 +67,11 @@ class CodexTraceNormalizer:
             "error_fingerprint": _normal_string(event.get("error_fingerprint")),
             "error_evidence": _normal_string(event.get("error_evidence")),
             "mutation_status": _normal_string(event.get("mutation_status")),
+            "message_role": _normal_string(event.get("message_role")),
+            "content_fingerprint": content_features.get("fingerprint") if content_features else None,
+            "content_terms": content_features.get("terms") if content_features else None,
+            "content_token_count": content_features.get("token_count") if content_features else None,
+            "content_excluded_reason": content_features.get("excluded_reason") if content_features else None,
         }
         normalized = {key: value for key, value in normalized.items() if value is not None}
         operation = classify_operation(event, normalized)
@@ -126,6 +145,31 @@ def normalize_exit_status(value):
     return "success" if value == 0 else f"failure:{value}"
 
 
+def normalize_message(value):
+    """Return deterministic, non-semantic content features for opt-in messages."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = _normalize_volatile_text(" ".join(value.casefold().split()))
+    normalized = re.sub(r"(?i)\b[a-z]:[/\\]+users[/\\]+[^\s/\\]+", "<home>", normalized)
+    normalized = re.sub(r"(?i)/home/[^/\s]+|/users/[^/\s]+", "<home>", normalized)
+    terms = sorted(set(_MESSAGE_TOKEN.findall(normalized)))
+    terms = [term for term in terms if len(term) > 1 and term != "home"]
+    token_count = len(_MESSAGE_TOKEN.findall(normalized))
+    excluded_reason = None
+    if _LOW_INFORMATION_MESSAGE.fullmatch(normalized):
+        excluded_reason = "greeting_or_acknowledgement"
+    elif _QUOTED_TOOL_OUTPUT.match(value.strip()):
+        excluded_reason = "quoted_tool_output"
+    elif token_count < 4:
+        excluded_reason = "low_information_boilerplate"
+    return {
+        "fingerprint": "sha256:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
+        "terms": terms,
+        "token_count": token_count,
+        "excluded_reason": excluded_reason,
+    }
+
+
 def normalize_error_text(value):
     """Normalize structured error text while masking volatile fragments."""
     if not isinstance(value, str) or not value.strip():
@@ -158,6 +202,7 @@ def _normal_string(value):
 
 
 def _normalize_volatile_text(value: str) -> str:
+    value = _SECRET.sub("<secret>", value)
     value = _UUID.sub("<uuid>", value)
     value = _HEX_ID.sub("<hex-id>", value)
     return _ISO_TIMESTAMP.sub("<timestamp>", value)

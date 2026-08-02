@@ -6,10 +6,12 @@ import re
 from datetime import datetime, timezone
 
 from .normalize import normalize_events
+from .correlation import BOUNDARY_RULES, correlate_messages, segment_episodes
+from .catalog import (attach_catalog_metadata, compute_baselines, lower_signal_candidates, deduplicate_catalog_findings, habit_summaries)
 
 
 class CodexWasteAnalyzer:
-    """Produce evidence-backed pilot findings without content analysis."""
+    """Produce evidence-backed findings, adding content only when opted in."""
 
     def analyze(self, events: list[dict]) -> dict:
         """Analyze a normalized timeline and return deterministic findings."""
@@ -17,15 +19,91 @@ class CodexWasteAnalyzer:
             events if all("normalized" in event for event in events) else normalize_events(events)
         )
         timeline = sorted(normalized, key=_timeline_key)
+        episodes = segment_episodes(timeline)
+        scoped_timeline = _attach_episode_scope(timeline, episodes)
         findings = []
         findings.extend(_repeated_commands(timeline))
         findings.extend(_repeated_discovery(timeline))
-        findings.extend(_mutation_aware_repetition(timeline))
+        findings.extend(_mutation_aware_repetition(scoped_timeline))
+        findings.extend(_repeated_test_churn(scoped_timeline))
         findings.extend(_recurring_failures(timeline))
         findings.extend(_automation_failure_episodes(timeline))
         findings.extend(_tokens_before_mutation(timeline))
-        findings.extend(_duplicate_subagent_work(timeline))
-        return {"findings": findings}
+        findings.extend(_duplicate_subagent_work(scoped_timeline))
+        correlation = correlate_messages(timeline, episodes)
+        findings.extend(correlation["candidates"])
+        for finding in findings:
+            finding.setdefault("evidence_kind", "structured")
+            attach_catalog_metadata(finding, scoped_timeline)
+        candidate_findings = deduplicate_catalog_findings(findings, scoped_timeline)
+        baselines = compute_baselines(timeline)
+        return {
+            "findings": findings,
+            "candidate_findings": candidate_findings,
+            "candidate_count": len(candidate_findings),
+            "habit_summaries": habit_summaries(candidate_findings, scoped_timeline),
+            "episodes": episodes,
+            "baselines": baselines,
+            "lower_signal_candidates": lower_signal_candidates(timeline, baselines),
+            "boundary_rules": BOUNDARY_RULES,
+            "similarity_ladder": correlation["similarity_ladder"],
+            "active_similarity_rules": correlation.get("active_similarity_rules", []),
+            "message_matches": correlation["message_matches"],
+        }
+
+
+def _candidate_groups(events, *, target_only=False):
+    groups = defaultdict(list)
+    for event in events:
+        normalized = event.get("normalized", {})
+        command = normalized.get("command")
+        target = normalized.get("read_path") or command
+        path = _path_key(normalized.get("path"))
+        if target:
+            groups[(_analysis_scope(event), None if target_only else command, path, target)].append(event)
+    return groups
+
+
+def _analysis_scope(event):
+    return event.get("_analysis_scope", (
+        event.get("normalized", {}).get("session_id"),
+        None,
+    ))
+
+
+def _repository_key(value):
+    paths = value if isinstance(value, list) else [value]
+    path = next((item for item in paths if isinstance(item, str)), None)
+    if not path:
+        return None
+    if re.search(r"\.[a-z0-9]{1,8}$", path, re.IGNORECASE):
+        return path.rsplit("/", 1)[0] or "/"
+    return path
+
+
+def _attach_episode_scope(events, episodes):
+    membership = {
+        (item.get("filepath"), item.get("line")): episode.get("episode_id")
+        for episode in episodes
+        for item in episode.get("event_evidence", [])
+    }
+    task_scopes = {}
+    task_number = 0
+    task_boundaries = {"first_event", "explicit_user_request", "agent_handoff", "idle_gap", "repository_or_workdir_change"}
+    for episode in episodes:
+        if task_number == 0 or task_boundaries.intersection(episode.get("boundary_rules", [])):
+            task_number += 1
+        task_scopes[episode.get("episode_id")] = f"task-{task_number}"
+    scoped = []
+    for event in events:
+        source = event.get("source", {})
+        episode_id = membership.get((source.get("filepath"), source.get("line")))
+        scope = (
+            event.get("normalized", {}).get("session_id"),
+            task_scopes.get(episode_id),
+        )
+        scoped.append(dict(event, _analysis_scope=scope))
+    return scoped
 
 
 def _mutation_aware_repetition(events):
@@ -36,15 +114,18 @@ def _mutation_aware_repetition(events):
 
 
 def _repeated_reads_without_mutation(events):
-    groups = _groups(
-        event for event in events
-        if event.get("event_type") == "tool_call"
-        and event.get("normalized", {}).get("command")
-        and event.get("normalized", {}).get("read_path")
+    groups = _candidate_groups(
+        (
+            event for event in events
+            if event.get("event_type") == "tool_call"
+            and event.get("normalized", {}).get("read_path")
+        ),
+        target_only=True,
     )
     findings = []
-    for (command, _path), evidence in groups.items():
+    for (_scope, _command, _path, target), evidence in groups.items():
         target = evidence[0]["normalized"]["read_path"]
+        command = evidence[0].get("normalized", {}).get("command")
         if len(evidence) < 2:
             continue
         pairs = _pairs_without_mutation(events, evidence, target)
@@ -64,14 +145,14 @@ def _repeated_reads_without_mutation(events):
 
 
 def _repeated_completed_commands_without_mutation(events):
-    groups = _groups(
+    groups = _candidate_groups(
         event for event in events
         if event.get("event_type") == "tool_output"
         and event.get("normalized", {}).get("command")
         and event.get("normalized", {}).get("exit_status")
     )
     findings = []
-    for (command, path), evidence in groups.items():
+    for (_scope, command, path, _target), evidence in groups.items():
         if len(evidence) < 2:
             continue
         pairs = _pairs_without_mutation(events, evidence, path)
@@ -96,11 +177,40 @@ def _repeated_completed_commands_without_mutation(events):
     return findings
 
 
+def _repeated_test_churn(events):
+    groups = _candidate_groups(
+        event for event in events
+        if event.get("event_type") == "tool_output"
+        and event.get("operation") == "test"
+        and event.get("normalized", {}).get("command")
+    )
+    findings = []
+    for (_scope, command, path, _target), evidence in groups.items():
+        if len(evidence) < 2:
+            continue
+        pairs = _pairs_without_mutation(events, evidence, path)
+        if not pairs:
+            continue
+        findings.append(_finding(
+            "test_churn_without_relevant_mutation",
+            "derived",
+            "medium",
+            "The same normalized test command recurred without an observed relevant successful mutation between outcomes.",
+            [item for pair in pairs for item in pair],
+            command=command,
+            path=path,
+            attempts=len(pairs) + 1,
+            test_outcomes=sorted({item.get("normalized", {}).get("exit_status") for item in evidence}),
+        ))
+    return findings
+
+
 def _pairs_without_mutation(all_events, evidence, target):
     pairs = []
     for first, second in zip(evidence, evidence[1:]):
+        scope = _analysis_scope(first)
         if not any(
-            _is_relevant_mutation(event, target)
+            _analysis_scope(event) == scope and _is_relevant_mutation(event, target)
             for event in all_events
             if _timeline_key(first) < _timeline_key(event) < _timeline_key(second)
         ):

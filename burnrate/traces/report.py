@@ -17,6 +17,7 @@ def new_sidecar(*, provider="codex"):
         "provider": provider,
         "sessions": {},
         "findings": {},
+        "episodes": {},
     }
 
 
@@ -46,8 +47,8 @@ def finding_id(finding):
     identity = {
         key: finding.get(key)
         for key in (
-            "kind", "command", "path", "read_path", "exit_status",
-            "evidence", "session_id", "parent_agent_id", "agents",
+            "kind", "candidate_id", "command", "path", "read_path", "exit_status", "matching_rule",
+            "evidence", "message_evidence", "episode_ids", "session_id", "parent_agent_id", "agents",
         )
         if finding.get(key) is not None
     }
@@ -56,14 +57,19 @@ def finding_id(finding):
 
 
 def record_finding_review(
-    sidecar, finding, *, decision, category=None, correction=None, notes=None
+    sidecar, finding, *, decision, category=None, correction=None, notes=None,
+    verdict=None,
 ):
     """Record a local confirmation or correction for one finding."""
-    if decision not in {"no_change", "change_workflow", "unclear"}:
-        raise ValueError("decision must be no_change, change_workflow, or unclear")
+    if decision not in {"no_change", "change_workflow", "unclear", "confirm", "reject", "correct"}:
+        raise ValueError("decision must be no_change, change_workflow, unclear, confirm, reject, or correct")
+    if verdict not in {None, "avoidable", "intentional", "inconclusive", "false_positive"}:
+        raise ValueError("verdict must be avoidable, intentional, inconclusive, or false_positive")
     key = finding_id(finding)
     sidecar.setdefault("findings", {})[key] = {
         "decision": decision,
+        "verdict": verdict,
+        "candidate_id": finding.get("candidate_id"),
         "category": category,
         "correction": correction,
         "notes": notes,
@@ -71,44 +77,109 @@ def record_finding_review(
     return key
 
 
-def report_document(analysis, sidecar=None):
+def record_episode_review(sidecar, episode, *, decision, correction=None, notes=None):
+    """Record a confirm/reject/correct decision for an inferred boundary."""
+    if decision not in {"confirm", "reject", "correct"}:
+        raise ValueError("decision must be confirm, reject, or correct")
+    identity = {"episode_id": episode.get("episode_id"), "boundary_evidence": episode.get("boundary_evidence")}
+    key = "episode-" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    sidecar.setdefault("episodes", {})[key] = {"decision": decision, "correction": correction, "notes": notes}
+    return key
+
+
+def report_document(analysis, sidecar=None, inspection_manifest=None):
     """Build a JSON-serializable report document from analyzer output."""
-    findings = deepcopy(analysis.get("findings", []))
+    raw_findings = deepcopy(analysis.get("findings", []))
+    findings = deepcopy(analysis["candidate_findings"] if "candidate_findings" in analysis else raw_findings)
+    manifest = inspection_manifest if inspection_manifest is not None else analysis.get("inspection_manifest")
     document = {
         "schema_version": REPORT_SCHEMA,
         "finding_count": len(findings),
+        "candidate_count": len(findings),
+        "raw_finding_count": len(raw_findings),
         "finding_labels": dict(sorted(Counter(item.get("label") for item in findings).items())),
         "findings": findings,
+        "raw_findings": raw_findings,
     }
+    if manifest:
+        document["inspection_manifest"] = deepcopy(manifest)
+    for field in (
+        "episodes",
+        "boundary_rules",
+        "similarity_ladder",
+        "active_similarity_rules",
+        "baselines",
+        "lower_signal_candidates",
+        "candidate_findings",
+        "candidate_count",
+        "habit_summaries",
+    ):
+        if analysis.get(field) is not None:
+            document[field] = deepcopy(analysis[field])
     if sidecar is not None:
         document["sidecar_schema_version"] = sidecar.get("schema_version")
         document["reviews"] = deepcopy(sidecar.get("findings", {}))
+        document["episode_reviews"] = deepcopy(sidecar.get("episodes", {}))
     return document
 
 
-def render_json(analysis, sidecar=None):
+def render_json(analysis, sidecar=None, inspection_manifest=None):
     """Render a stable JSON report string."""
     return json.dumps(
-        report_document(analysis, sidecar),
+        report_document(analysis, sidecar, inspection_manifest),
         indent=2,
         sort_keys=True,
         ensure_ascii=True,
     ) + "\n"
 
 
-def render_markdown(analysis, sidecar=None):
+def render_markdown(analysis, sidecar=None, inspection_manifest=None):
     """Render a stable, evidence-linked Markdown report."""
-    findings = analysis.get("findings", [])
+    findings = analysis["candidate_findings"] if "candidate_findings" in analysis else analysis.get("findings", [])
+    manifest = inspection_manifest if inspection_manifest is not None else analysis.get("inspection_manifest", [])
     reviews = sidecar.get("findings", {}) if sidecar else {}
     lines = [
         "# Codex pilot report",
         "",
-        f"Findings: {len(findings)}",
+        f"Candidate occurrences: {len(findings)}",
         "",
         "This report contains structured execution evidence only. Natural-language",
         "user, agent, reasoning, stdout, and stderr bodies are not included.",
         "",
     ]
+    if manifest:
+        lines.extend(["Inspection manifest:", ""])
+        for item in manifest:
+            lines.append(
+                f"- `{item.get('filepath')}:{item.get('line')}` "
+                f"field `{item.get('field')}` ({item.get('role', 'unknown')})"
+            )
+        lines.append("")
+    if analysis.get("habit_summaries"):
+        lines.extend(["## Habit summaries", ""])
+        for summary in analysis["habit_summaries"]:
+            lines.append(
+                f"- `{summary.get('candidate_id')}`: {summary.get('occurrence_count')} "
+                f"occurrence(s) across {len(summary.get('sessions', []))} session(s); "
+                f"{summary.get('pattern')}"
+            )
+            if summary.get("try_next_experiment") or summary.get("possible_intervention"):
+                experiment = summary.get("try_next_experiment") or summary.get("possible_intervention")
+                lines.append(f"  - Qualified experiment (unconfirmed): {experiment}")
+        lines.append("")
+    if analysis.get("lower_signal_candidates"):
+        lines.extend(["## Unavailable or signal-only rules", ""])
+        for item in analysis["lower_signal_candidates"]:
+            lines.append(
+                f"- `{item.get('candidate_id')}`: {item.get('evidence_limitation')}"
+            )
+        lines.append("")
+    if analysis.get("episodes"):
+        lines.extend(["## Episode boundaries", ""])
+        for episode in analysis["episodes"]:
+            source = episode.get("boundary_evidence", [{}])[0]
+            lines.append(f"- `{episode.get('episode_id')}`: {', '.join(episode.get('boundary_rules', []))} at `{source.get('filepath')}:{source.get('line')}`")
+        lines.append("")
     for index, finding in enumerate(findings, 1):
         key = finding_id(finding)
         review = reviews.get(key, {})
@@ -119,11 +190,13 @@ def render_markdown(analysis, sidecar=None):
             f"- Confidence: `{finding.get('confidence', 'none')}`",
             f"- Rule: {finding.get('confidence_rule', 'No rule supplied.')}",
         ])
-        for field in ("command", "path", "read_path", "exit_status", "attempts", "tokens_consumed"):
+        for field in ("candidate_id", "candidate_status", "evidence_kind", "matching_rule", "command", "path", "read_path", "exit_status", "attempts", "tokens_consumed", "progress_signal", "metrics", "baseline", "possible_intervention"):
             if finding.get(field) is not None:
                 lines.append(f"- {field}: `{finding[field]}`")
         if review:
             lines.append(f"- Review decision: `{review.get('decision')}`")
+            if review.get("verdict"):
+                lines.append(f"- User verdict: `{review.get('verdict')}`")
         lines.append("- Evidence:")
         for evidence in finding.get("evidence", []):
             lines.append(f"  - `{evidence.get('filepath')}:{evidence.get('line')}`")
@@ -136,6 +209,8 @@ def suggestion_text(sidecar):
     suggestions = []
     for key, review in sorted(sidecar.get("findings", {}).items()):
         if review.get("decision") != "change_workflow":
+            continue
+        if review.get("candidate_id") and review.get("verdict") != "avoidable":
             continue
         category = review.get("category") or "execution pattern"
         notes = review.get("notes") or "Review the supporting evidence before changing workflow guidance."

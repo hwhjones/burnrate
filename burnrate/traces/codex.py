@@ -36,9 +36,17 @@ class CodexTraceReader:
         self.events = []
         self.skip_counts = {}
         self.file_read_errors = []
+        self.content_manifest = []
+        self.include_content = False
+        self.content_roles = {"user", "agent"}
 
-    def parse(self) -> list[dict]:
-        """Return structured pilot events from a file or recursive directory."""
+    def parse(self, *, include_content=False, content_roles=None) -> list[dict]:
+        """Return structured events, optionally including selected message text.
+
+        Content interrogation is opt-in. The default path retains the original
+        body-free event contract. ``content_manifest`` records every selected
+        source field read when content is enabled.
+        """
         self.events = []
         self.skip_counts = {
             "malformed_json": 0,
@@ -46,6 +54,14 @@ class CodexTraceReader:
             "invalid_record_shape": 0,
         }
         self.file_read_errors = []
+        self.content_manifest = []
+        self.include_content = bool(include_content)
+        requested_roles = content_roles or {"user", "agent"}
+        self.content_roles = {
+            "agent" if role == "assistant" else role
+            for role in requested_roles
+            if role in {"user", "agent", "assistant"}
+        }
 
         for file_path in self._discover_jsonl_files():
             try:
@@ -93,6 +109,15 @@ class CodexTraceReader:
                         "filepath": str(file_path.resolve()),
                         "line": source_line,
                     }
+                    content_field = event.pop("_content_source_field", None)
+                    if content_field is not None:
+                        self.content_manifest.append({
+                            "filepath": event["source"]["filepath"],
+                            "line": source_line,
+                            "event_type": event.get("event_type"),
+                            "role": event.get("message_role"),
+                            "field": content_field,
+                        })
                     self.events.append(event)
 
     def _extract_event(self, record, current_session, calls):
@@ -116,6 +141,28 @@ class CodexTraceReader:
         )
         base = _lineage(record, payload, session_id)
         payload_type = _string(payload.get("type"))
+
+        if (
+            self.include_content
+            and record_type == "event_msg"
+            and payload_type in {"user_message", "agent_message"}
+        ):
+            role = "user" if payload_type == "user_message" else "agent"
+            if role not in self.content_roles:
+                return None, session_id, None
+            field, message = _message_text(payload)
+            if field is not None and message is not None:
+                return (
+                    dict(
+                        base,
+                        event_type=payload_type,
+                        message_role=role,
+                        message_text=message,
+                        _content_source_field=field,
+                    ),
+                    session_id,
+                    None,
+                )
 
         if record_type == "response_item" and payload_type in {
             "function_call",
@@ -174,6 +221,24 @@ class CodexTraceReader:
         # Messages and reasoning are intentionally not represented.
         return None, session_id, None
 
+
+def _message_text(payload):
+    """Return one supported message field without inspecting tool bodies."""
+    for field in ("message", "text", "content"):
+        value = payload.get(field)
+        if isinstance(value, str) and value:
+            return f"payload.{field}", value
+        if field == "content" and isinstance(value, list):
+            parts = [
+                item.get("text")
+                for item in value
+                if isinstance(item, Mapping)
+                and isinstance(item.get("text"), str)
+                and item.get("text")
+            ]
+            if parts:
+                return "payload.content[].text", "\n".join(parts)
+    return None, None
 
 def _lineage(record, payload, session_id):
     event = {}
