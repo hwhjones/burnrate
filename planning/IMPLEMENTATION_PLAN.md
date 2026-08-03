@@ -75,7 +75,7 @@ Add at most three production modules:
 burnrate/
   analyser/
     patterns.py        JSONL reader, session accumulator, detectors
-  pattern_catalog.py   rule names, thresholds, explanations, experiments
+    pattern_catalog.py rule names, thresholds, explanations, experiments
   pattern_report.py    deterministic text and JSON rendering
   main.py              existing CLI plus opt-in pattern routing
 ```
@@ -172,25 +172,25 @@ frequency-signal preprocessing.
 
 **Files**
 
-- [ ] Extend `burnrate/analyser/patterns.py`.
-- [ ] Add `burnrate/pattern_catalog.py` with only implemented rule metadata.
-- [ ] Add `tests/test_pattern_observations.py`.
+- [x] Extend `burnrate/analyser/patterns.py`.
+- [x] Add `burnrate/analyser/pattern_catalog.py` with only implemented rule metadata.
+- [x] Add `tests/test_pattern_observations.py`.
 
 **Implementation**
 
-- [ ] Implement `R-READ-01`, counting `n - 1` repeats per target and session.
-- [ ] Implement `R-RETRY-01` as distinct consecutive retry sequences.
-- [ ] Implement `R-TEST-01`, with successful mutation as a sequence boundary.
-- [ ] Return the shared result shape with at most three source examples.
-- [ ] Sort occurrences deterministically.
+- [x] Implement `R-READ-01`, counting `n - 1` repeats per target and session.
+- [x] Implement `R-RETRY-01` as distinct consecutive retry sequences.
+- [x] Implement `R-TEST-01`, with successful mutation as a sequence boundary.
+- [x] Return the shared result shape with at most three source examples.
+- [x] Sort occurrences deterministically.
 
 **Acceptance**
 
-- [ ] No pairwise count inflation.
-- [ ] Success or a changed command/fingerprint ends a retry sequence.
-- [ ] A successful mutation ends a test-churn sequence.
-- [ ] Missing required fields suppress the rule.
-- [ ] One underlying sequence belongs to one rule.
+- [x] No pairwise count inflation.
+- [x] Success or a changed command/fingerprint ends a retry sequence.
+- [x] A successful mutation ends a test-churn sequence.
+- [x] Missing required fields suppress the rule.
+- [x] One underlying sequence belongs to one rule.
 
 **Excluded:** message similarity, inferred tasks, confidence scores, reviews,
 baselines, and frequency thresholds.
@@ -200,7 +200,7 @@ baselines, and frequency thresholds.
 **Files**
 
 - [ ] Extend `burnrate/analyser/patterns.py`.
-- [ ] Extend `burnrate/pattern_catalog.py`.
+- [ ] Extend `burnrate/analyser/pattern_catalog.py`.
 - [ ] Add `tests/test_pattern_signals.py`.
 
 **Implementation**

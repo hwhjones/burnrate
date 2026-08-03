@@ -19,6 +19,11 @@ _READ_TYPES = {"read", "read_file", "file_read", "open_file"}
 _MUTATION_TYPES = {"mutation", "patch", "file_write", "write_file"}
 _TEST_RE = re.compile(r"(?:^|\s)(?:pytest|py\.test|unittest|npm\s+test|cargo\s+test|go\s+test)(?:\s|$)", re.I)
 _MUTATION_RE = re.compile(r"(?:apply_patch|git\s+(?:apply|commit)|(?:set|add|out)-content|touch\s|mkdir\s|npm\s+install)", re.I)
+RULE_CATALOG = {
+    "R-READ-01": {"name": "Repeated file reads", "classification": "observation", "explanation": "The same normalized file was read more than once.", "try_next_experiment": "Reference the earlier read when it remains current."},
+    "R-RETRY-01": {"name": "Ineffective retries", "classification": "observation", "explanation": "The same failed command and failure fingerprint recurred consecutively.", "try_next_experiment": "Change the command or inspect the failure before retrying it."},
+    "R-TEST-01": {"name": "Test churn", "classification": "observation", "explanation": "The same test command recurred without an observed successful mutation.", "try_next_experiment": "Make or verify the smallest mutation before rerunning the same test."},
+}
 
 
 class PatternFact:
@@ -182,7 +187,10 @@ def _fact_from_record(record: dict[str, Any], payload: dict[str, Any], session_i
         kind == "mutation" or bool(command and _MUTATION_RE.search(command))
     )
     failure = payload.get("failure_fingerprint") or payload.get("error")
-    failure_fingerprint = _normalize_text(failure) if payload.get("exit_code", 0) not in (0, None) else None
+    exit_code = payload.get("exit_code")
+    if failure is None and isinstance(exit_code, int) and exit_code != 0:
+        failure = f"exit_code:{exit_code}"
+    failure_fingerprint = _normalize_text(failure) if failure is not None else None
     return PatternFact(session_id, sequence, filepath, line, timestamp, kind, target, command,
                        failure_fingerprint, successful_mutation)
 
@@ -218,3 +226,81 @@ def _normalize_command(value: Any) -> str | None:
 def _normalize_target(value: Any) -> str | None:
     value = _string(value)
     return value.replace("\\", "/") if value else None
+
+
+def detect_observations(scan: PatternScan) -> list[dict[str, Any]]:
+    """Detect the three direct observations from a PatternScan."""
+    occurrences = []
+    for session in scan.sessions:
+        occurrences.extend(_detect_repeated_reads(session))
+        occurrences.extend(_detect_retries(session))
+        occurrences.extend(_detect_test_churn(session))
+    results = []
+    for rule_id in RULE_CATALOG:
+        rule_occurrences = [item for item in occurrences if item["rule_id"] == rule_id]
+        if not rule_occurrences:
+            continue
+        metadata = RULE_CATALOG[rule_id]
+        results.append({
+            "id": rule_id,
+            "name": metadata["name"],
+            "classification": metadata["classification"],
+            "count": len(rule_occurrences),
+            "affected_sessions": len({item["session_id"] for item in rule_occurrences}),
+            "explanation": metadata["explanation"],
+            "try_next_experiment": metadata["try_next_experiment"],
+            "examples": [item["example"] for item in rule_occurrences[:3]],
+        })
+    return sorted(results, key=lambda result: (-result["count"], result["id"]))
+
+
+def _detect_repeated_reads(session: SessionFacts) -> list[dict[str, Any]]:
+    by_target: dict[str, list[PatternFact]] = {}
+    for fact in session.facts:
+        if fact.kind == "read" and fact.target:
+            by_target.setdefault(fact.target, []).append(fact)
+    occurrences = []
+    for target in sorted(by_target):
+        for fact in by_target[target][1:]:
+            occurrences.append(_occurrence("R-READ-01", session.session_id, fact, target=target))
+    return occurrences
+
+
+def _detect_retries(session: SessionFacts) -> list[dict[str, Any]]:
+    occurrences = []
+    previous_key = None
+    for fact in session.facts:
+        if fact.kind == "test":
+            previous_key = None
+            continue
+        if fact.kind != "command" or not fact.command:
+            continue
+        if not fact.failure_fingerprint:
+            previous_key = None
+            continue
+        key = (fact.command, fact.failure_fingerprint)
+        if key == previous_key:
+            occurrences.append(_occurrence("R-RETRY-01", session.session_id, fact, command=fact.command))
+        previous_key = key
+    return occurrences
+
+
+def _detect_test_churn(session: SessionFacts) -> list[dict[str, Any]]:
+    occurrences = []
+    previous_command = None
+    for fact in session.facts:
+        if fact.successful_mutation:
+            previous_command = None
+            continue
+        if fact.kind != "test" or not fact.command:
+            continue
+        if fact.command == previous_command:
+            occurrences.append(_occurrence("R-TEST-01", session.session_id, fact, command=fact.command))
+        previous_command = fact.command
+    return occurrences
+
+
+def _occurrence(rule_id: str, session_id: str, fact: PatternFact, **fields: str) -> dict[str, Any]:
+    example = {"filepath": fact.filepath, "line": fact.line}
+    example.update(fields)
+    return {"rule_id": rule_id, "session_id": session_id, "sequence": fact.sequence, "example": example}
