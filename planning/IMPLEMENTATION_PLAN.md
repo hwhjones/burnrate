@@ -73,7 +73,8 @@ Add at most three production modules:
 
 ```text
 burnrate/
-  patterns.py          JSONL reader, session accumulator, detectors
+  analyser/
+    patterns.py        JSONL reader, session accumulator, detectors
   pattern_catalog.py   rule names, thresholds, explanations, experiments
   pattern_report.py    deterministic text and JSON rendering
   main.py              existing CLI plus opt-in pattern routing
@@ -128,39 +129,39 @@ privacy-safe event facts needed by `R-READ-01`, `R-RETRY-01`, and `R-TEST-01`.
 
 **Files**
 
-- [ ] Add `burnrate/patterns.py`.
-- [ ] Add `tests/test_pattern_reader.py`.
+- [x] Add `burnrate/analyser/patterns.py`.
+- [x] Add `tests/test_pattern_reader.py`.
 
 **Implementation**
 
-- [ ] Discover a file or recursive JSONL directory using existing safe
+- [x] Discover a file or recursive JSONL directory using existing safe
   filesystem behavior.
-- [ ] Parse line by line and continue after malformed records.
-- [ ] Retain only the minimum rule inputs: session identity, deterministic
+- [x] Parse line by line and continue after malformed records.
+- [x] Retain only the minimum rule inputs: session identity, deterministic
   event order, source location, normalized read target, normalized command and
   failure fingerprint, test-command classification, and successful mutation
   marker.
-- [ ] Retain final per-request token usage only where it is needed to preserve
+- [x] Retain final per-request token usage only where it is needed to preserve
   existing session facts; do not prepare token-threshold data for PR3.
-- [ ] Deduplicate cumulative token records within each session without
+- [x] Deduplicate cumulative token records within each session without
   deduplicating records by timestamp alone.
-- [ ] Keep the reader's event vocabulary deliberately narrow. Defer bounded
+- [x] Keep the reader's event vocabulary deliberately narrow. Defer bounded
   output sizes, turn-boundary modeling, agent/subagent counts, web counts,
   duration aggregation, and generalized tool taxonomy until the later PR that
   needs them.
-- [ ] Expose complete, partial, empty, and invalid scan status without changing
+- [x] Expose complete, partial, empty, and invalid scan status without changing
   the current CLI.
 
 **Acceptance**
 
-- [ ] Repeated cumulative records are counted once.
-- [ ] Two sessions never share token state.
-- [ ] Unreadable files preserve readable session results and mark the scan
+- [x] Repeated cumulative records are counted once.
+- [x] Two sessions never share token state.
+- [x] Unreadable files preserve readable session results and mark the scan
   partial.
-- [ ] Message and tool-output bodies are not retained.
-- [ ] The returned facts are sufficient to implement the three direct
+- [x] Message and tool-output bodies are not retained.
+- [x] The returned facts are sufficient to implement the three direct
   observation rules without speculative preprocessing for frequency signals.
-- [ ] Existing tests pass unchanged.
+- [x] Existing tests pass unchanged.
 
 **Excluded:** detectors, catalog metadata, reports, CLI flags, provider
 abstraction, generic event types, bounded output sizes, turn-boundary
@@ -171,7 +172,7 @@ frequency-signal preprocessing.
 
 **Files**
 
-- [ ] Extend `burnrate/patterns.py`.
+- [ ] Extend `burnrate/analyser/patterns.py`.
 - [ ] Add `burnrate/pattern_catalog.py` with only implemented rule metadata.
 - [ ] Add `tests/test_pattern_observations.py`.
 
@@ -198,7 +199,7 @@ baselines, and frequency thresholds.
 
 **Files**
 
-- [ ] Extend `burnrate/patterns.py`.
+- [ ] Extend `burnrate/analyser/patterns.py`.
 - [ ] Extend `burnrate/pattern_catalog.py`.
 - [ ] Add `tests/test_pattern_signals.py`.
 
