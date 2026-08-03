@@ -50,6 +50,17 @@ class PatternObservationTests(unittest.TestCase):
             self.assertEqual(results[0]["id"], "R-TEST-01")
             self.assertEqual(results[0]["count"], 1)
 
+    def test_real_codex_function_call_envelope_produces_read_fact(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = self.write_records(Path(temp_dir), [
+                {"type": "response_item", "session_id": "a", "payload": {"type": "function_call", "name": "shell_command", "call_id": "1", "arguments": json.dumps({"command": "Get-Content -LiteralPath 'src/app.py'"})}},
+                {"type": "response_item", "session_id": "a", "payload": {"type": "function_call_output", "call_id": "1", "output": "Exit code: 0"}},
+                {"type": "response_item", "session_id": "a", "payload": {"type": "function_call", "name": "shell_command", "call_id": "2", "arguments": json.dumps({"command": "Get-Content -LiteralPath 'src/app.py'"})}},
+                {"type": "response_item", "session_id": "a", "payload": {"type": "function_call_output", "call_id": "2", "output": "Exit code: 0"}},
+            ])
+            results = detect_observations(PatternReader(str(path)).scan())
+            self.assertEqual(results[0]["id"], "R-READ-01")
+            self.assertEqual(results[0]["count"], 1)
     def test_missing_required_fields_suppress_rules_and_examples_are_bounded(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             records = [{"session_id": "a", "payload": {"type": "read_file"}}]

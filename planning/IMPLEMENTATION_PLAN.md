@@ -181,6 +181,7 @@ frequency-signal preprocessing.
 - [x] Implement `R-READ-01`, counting `n - 1` repeats per target and session.
 - [x] Implement `R-RETRY-01` as distinct consecutive retry sequences.
 - [x] Implement `R-TEST-01`, with successful mutation as a sequence boundary.
+- [x] Map real Codex function/custom tool calls and outputs conservatively by call ID, retaining only normalized command/path, failure fingerprints, and mutation status.
 - [x] Return the shared result shape with at most three source examples.
 - [x] Sort occurrences deterministically.
 

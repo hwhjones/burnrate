@@ -6,6 +6,7 @@ direct observation rules. It is not a general Codex event model.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -16,7 +17,8 @@ from typing import Any
 
 
 _READ_TYPES = {"read", "read_file", "file_read", "open_file"}
-_MUTATION_TYPES = {"mutation", "patch", "file_write", "write_file"}
+_MUTATION_TYPES = {"mutation", "patch", "file_write", "write_file", "patch_apply_end"}
+_READ_COMMAND_RE = re.compile(r"(?:Get-Content|cat|type|head|tail|sed)(?:\s|$)", re.I)
 _TEST_RE = re.compile(r"(?:^|\s)(?:pytest|py\.test|unittest|npm\s+test|cargo\s+test|go\s+test)(?:\s|$)", re.I)
 _MUTATION_RE = re.compile(r"(?:apply_patch|git\s+(?:apply|commit)|(?:set|add|out)-content|touch\s|mkdir\s|npm\s+install)", re.I)
 RULE_CATALOG = {
@@ -120,6 +122,7 @@ class PatternReader:
     def _read_file(self, path: Path, sessions: dict[str, SessionFacts], result: PatternScan) -> None:
         resolved = str(path.resolve())
         sequence = 0
+        pending_calls: dict[str, PatternFact] = {}
         with path.open("r", encoding="utf-8-sig") as handle:
             for line_number, raw_line in enumerate(handle, start=1):
                 if not raw_line.strip():
@@ -146,10 +149,19 @@ class PatternReader:
                 if payload.get("type") == "token_count":
                     self._retain_token_snapshot(record, payload, session, resolved, line_number, timestamp)
 
+                if payload.get("type") in ("function_call_output", "custom_tool_call_output"):
+                    call_id = _string(payload.get("call_id"))
+                    if call_id and call_id in pending_calls:
+                        _apply_call_output(pending_calls[call_id], payload.get("output"))
+                    continue
+
                 fact = _fact_from_record(record, payload, session_id, sequence, resolved, line_number, timestamp)
                 if fact is not None:
                     session.facts.append(fact)
                     sequence += 1
+                    call_id = _string(payload.get("call_id"))
+                    if call_id and payload.get("type") in ("function_call", "custom_tool_call"):
+                        pending_calls[call_id] = fact
 
     @staticmethod
     def _retain_token_snapshot(record: dict[str, Any], payload: dict[str, Any], session: SessionFacts,
@@ -171,8 +183,17 @@ def _fact_from_record(record: dict[str, Any], payload: dict[str, Any], session_i
     name = _string(payload.get("name")) or _string(payload.get("tool_name"))
     command = _normalize_command(payload.get("command") or payload.get("cmd"))
     target = _normalize_target(payload.get("path") or payload.get("filepath"))
+    if event_type in ("function_call", "custom_tool_call"):
+        arguments = _decode_arguments(payload.get("arguments") or payload.get("input"))
+        if isinstance(arguments, dict):
+            command = _normalize_command(arguments.get("command") or arguments.get("cmd")) or command
+            target = _normalize_target(arguments.get("path") or arguments.get("filepath")) or target
+        if name == "apply_patch":
+            event_type = "mutation"
+    if command and target is None:
+        target = _target_from_command(command)
     kind = "unknown"
-    if event_type in _READ_TYPES or name in _READ_TYPES:
+    if (target and command and _READ_COMMAND_RE.search(command)) or event_type in _READ_TYPES or name in _READ_TYPES:
         kind = "read"
     elif event_type in _MUTATION_TYPES or name in _MUTATION_TYPES:
         kind = "mutation"
@@ -225,7 +246,9 @@ def _normalize_command(value: Any) -> str | None:
 
 def _normalize_target(value: Any) -> str | None:
     value = _string(value)
-    return value.replace("\\", "/") if value else None
+    if not value or value.startswith("$") or "${" in value:
+        return None
+    return value.replace("\\", "/")
 
 
 def detect_observations(scan: PatternScan) -> list[dict[str, Any]]:
@@ -304,3 +327,45 @@ def _occurrence(rule_id: str, session_id: str, fact: PatternFact, **fields: str)
     example = {"filepath": fact.filepath, "line": fact.line}
     example.update(fields)
     return {"rule_id": rule_id, "session_id": session_id, "sequence": fact.sequence, "example": example}
+
+def _decode_arguments(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+
+def _target_from_command(command: str) -> str | None:
+    quoted = re.search(r"(?:Get-Content|cat|type|head|tail|sed)\s+(?:-LiteralPath\s+)?['\"]([^'\"]+)['\"]", command, re.I)
+    if quoted:
+        return _normalize_target(quoted.group(1))
+    unquoted = re.search(r"(?:Get-Content|cat|type|head|tail|sed)\s+(?:-LiteralPath\s+)?([^\s|;]+)", command, re.I)
+    return _normalize_target(unquoted.group(1)) if unquoted else None
+
+def _output_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return " ".join(_output_text(item) for item in value)
+    if isinstance(value, dict):
+        return " ".join(_output_text(item) for item in value.values())
+    return ""
+
+
+def _apply_call_output(fact: PatternFact, output: Any) -> None:
+    text = _output_text(output)
+    match = re.search(r"(?:exit\s+code|exit_code|status)\s*[:=]\s*(-?\d+)", text, re.I)
+    if match:
+        exit_code = int(match.group(1))
+        if exit_code == 0:
+            fact.failure_fingerprint = None
+            if fact.kind == "mutation" or (fact.command and _MUTATION_RE.search(fact.command)):
+                fact.successful_mutation = True
+        else:
+            fact.failure_fingerprint = f"exit_code:{exit_code}"
+    elif text and re.search(r"\b(?:failed|error)\b", text, re.I):
+        fact.failure_fingerprint = "output:" + hashlib.sha256(text.encode("utf-8", "ignore")).hexdigest()[:16]
