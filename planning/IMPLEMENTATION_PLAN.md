@@ -196,6 +196,35 @@ frequency-signal preprocessing.
 **Excluded:** message similarity, inferred tasks, confidence scores, reviews,
 baselines, and frequency thresholds.
 
+**Real-log extension and interpretation guardrail**
+
+- [x] Map `response_item.function_call` and `custom_tool_call` records using
+  their JSON arguments or inputs.
+- [x] Pair function/custom tool outputs by `call_id` and retain only exit
+  status, a bounded failure fingerprint, and successful mutation status.
+- [x] Recognize `patch_apply_end` as a successful mutation boundary when its
+  structured success field is true.
+- [x] Extract literal read targets from conservative command forms such as
+  `Get-Content`, `cat`, `type`, `head`, `tail`, and `sed`; reject variable
+  placeholders such as `$file.FullName`.
+- [x] Do not retain message bodies, reasoning bodies, or tool-output bodies.
+- [x] Keep repeated reads classified as observations. A repeated read is not
+  described as unnecessary, avoidable, wasteful, or inefficient without
+  additional evidence.
+
+**PR2 local smoke-test record (2026-08-03)**
+
+The 20-day scan covered 15 July through 3 August 2026, using 52 local Codex
+JSONL files and 72 sessions:
+
+- `R-READ-01`: 87 occurrences across 11 sessions.
+- `R-RETRY-01`: 0 qualifying consecutive retry occurrences.
+- `R-TEST-01`: 0 qualifying test-churn occurrences.
+
+These are direct observations from the local logs, not proof of unnecessary
+work or measured waste. The smoke test is evidence that the reader and rules
+can operate on real Codex envelopes; synthetic fixtures remain the correctness
+oracle.
 ### PR 3 - Transparent frequency signals
 
 **Files**
