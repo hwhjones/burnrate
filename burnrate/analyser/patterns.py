@@ -358,7 +358,7 @@ def _output_text(value: Any) -> str:
 
 def _apply_call_output(fact: PatternFact, output: Any) -> None:
     text = _output_text(output)
-    match = re.search(r"(?:exit\s+code|exit_code|status)\s*[:=]\s*(-?\d+)", text, re.I)
+    match = re.search(r"(?:exit\s+code|exited\s+with\s+code|exit_code|status)\s*[:=]?\s*(-?\d+)", text, re.I)
     if match:
         exit_code = int(match.group(1))
         if exit_code == 0:
