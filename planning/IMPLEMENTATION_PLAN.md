@@ -121,6 +121,11 @@ separate.
 
 ### PR 1 - Codex pattern session reader
 
+PR1 is intentionally a thin reader. Do not build a generalized telemetry
+model or preprocess facts for the later frequency signals before the direct
+observation rules have produced useful results. Retain only the smallest
+privacy-safe event facts needed by `R-READ-01`, `R-RETRY-01`, and `R-TEST-01`.
+
 **Files**
 
 - [ ] Add `burnrate/patterns.py`.
@@ -131,10 +136,18 @@ separate.
 - [ ] Discover a file or recursive JSONL directory using existing safe
   filesystem behavior.
 - [ ] Parse line by line and continue after malformed records.
-- [ ] Retain only first/last timestamps, final per-request token usage,
-  normalized tool facts, bounded output sizes, mutation markers, turn
-  boundaries, agent/web counts, and source locations.
-- [ ] Deduplicate cumulative token records within each session.
+- [ ] Retain only the minimum rule inputs: session identity, deterministic
+  event order, source location, normalized read target, normalized command and
+  failure fingerprint, test-command classification, and successful mutation
+  marker.
+- [ ] Retain final per-request token usage only where it is needed to preserve
+  existing session facts; do not prepare token-threshold data for PR3.
+- [ ] Deduplicate cumulative token records within each session without
+  deduplicating records by timestamp alone.
+- [ ] Keep the reader's event vocabulary deliberately narrow. Defer bounded
+  output sizes, turn-boundary modeling, agent/subagent counts, web counts,
+  duration aggregation, and generalized tool taxonomy until the later PR that
+  needs them.
 - [ ] Expose complete, partial, empty, and invalid scan status without changing
   the current CLI.
 
@@ -145,10 +158,14 @@ separate.
 - [ ] Unreadable files preserve readable session results and mark the scan
   partial.
 - [ ] Message and tool-output bodies are not retained.
+- [ ] The returned facts are sufficient to implement the three direct
+  observation rules without speculative preprocessing for frequency signals.
 - [ ] Existing tests pass unchanged.
 
 **Excluded:** detectors, catalog metadata, reports, CLI flags, provider
-abstraction, and generic event types.
+abstraction, generic event types, bounded output sizes, turn-boundary
+modeling, agent/subagent counts, web counts, duration aggregation, and
+frequency-signal preprocessing.
 
 ### PR 2 - Direct observation rules
 
