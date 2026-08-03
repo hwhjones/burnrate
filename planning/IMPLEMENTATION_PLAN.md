@@ -168,7 +168,7 @@ abstraction, generic event types, bounded output sizes, turn-boundary
 modeling, agent/subagent counts, web counts, duration aggregation, and
 frequency-signal preprocessing.
 
-### PR 2 - Direct observation rules
+### PR 2 - Direct observation rules (follow-up investigation open)
 
 **Files**
 
@@ -225,6 +225,39 @@ These are direct observations from the local logs, not proof of unnecessary
 work or measured waste. The smoke test is evidence that the reader and rules
 can operate on real Codex envelopes; synthetic fixtures remain the correctness
 oracle.
+**Follow-up investigation — PR2 remains open**
+
+- [ ] Audit real `function_call`/`function_call_output` pairing for failed shell
+  commands, including delayed or interleaved outputs and output formats that
+  report failure without the currently recognized exit-status wording.
+- [ ] Add fixtures for every observed failure-status envelope and prove the
+  failure fingerprint is attached to the correct call without retaining output
+  bodies.
+- [ ] Add a diagnostic count for repeated command candidates suppressed because
+  one or more attempts lack required failure evidence.
+- [ ] Deep-dive `R-TEST-01` against real Codex test invocations, including
+  `pytest`, `unittest`, repository-specific test wrappers, and commands whose
+  test intent is available only in structured tool arguments.
+- [ ] Verify test-command normalization across equivalent invocations and ensure
+  changed commands start new sequences.
+- [ ] Verify successful mutation boundaries from `patch_apply_end` and successful
+  shell commands, including mutations between test attempts and interleaved
+  read/tool events.
+- [ ] Run a focused 20-day real-log review for test candidates and suppressed
+  retry candidates before closing PR2.
+
+**Follow-up acceptance**
+
+- [ ] A repeated failed command is reported when both attempts have reliable
+  failure evidence, regardless of the recognized output envelope wording.
+- [ ] Missing failure evidence remains unavailable and is distinguishable from
+  zero retry occurrences.
+- [ ] `R-TEST-01` identifies actual repeated test commands without treating
+  generic shell commands as tests.
+- [ ] A successful observed mutation always ends test churn, while unrelated
+  reads and tool events do not accidentally end it.
+- [ ] The smoke-test record is updated with confirmed findings and suppressed
+  candidates separately.
 ### PR 3 - Transparent frequency signals
 
 **Files**
