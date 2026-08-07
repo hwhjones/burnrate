@@ -1,5 +1,9 @@
-"""Metadata for the direct Codex pattern observations implemented in PR2."""
+"""Public catalog and thresholds for analyser pattern signals."""
 
-from .patterns import RULE_CATALOG
+from .patterns import (
+    RULE_CATALOG, EXPLORATION_CALL_THRESHOLD, SESSION_DURATION_SECONDS_THRESHOLD,
+    SESSION_WORK_TOKEN_THRESHOLD, LARGE_OUTPUT_CHAR_THRESHOLD,
+    SUBAGENT_SPAWN_THRESHOLD,
+)
 
-__all__ = ["RULE_CATALOG"]
+__all__ = ["RULE_CATALOG", "EXPLORATION_CALL_THRESHOLD", "SESSION_DURATION_SECONDS_THRESHOLD", "SESSION_WORK_TOKEN_THRESHOLD", "LARGE_OUTPUT_CHAR_THRESHOLD", "SUBAGENT_SPAWN_THRESHOLD"]

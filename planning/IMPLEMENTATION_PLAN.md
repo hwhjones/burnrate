@@ -214,12 +214,21 @@ baselines, and frequency thresholds.
 
 **PR2 local smoke-test record (2026-08-03)**
 
-The 20-day scan covered 15 July through 3 August 2026, using 52 local Codex
-JSONL files and 72 sessions:
+The 20-day scan covered 15 July through 3 August 2026. The reproducible
+rerun selected files containing at least one event timestamp in that UTC window:
+42 local Codex JSONL files and 72 sessions:
 
 - `R-READ-01`: 87 occurrences across 11 sessions.
 - `R-RETRY-01`: 0 qualifying consecutive retry occurrences.
 - `R-TEST-01`: 0 qualifying test-churn occurrences.
+
+PR2 follow-up rerun (2026-08-04) found 1 test candidate (a repository-specific
+unittest invocation), 0 qualifying test-churn occurrences, 0 qualifying retry
+occurrences, and 5 repeated-command candidates suppressed because failure
+evidence was unavailable. The scan had 1 malformed record and remained
+complete; these diagnostics are reported separately from zero occurrences.
+The prior 52-file figure is not reproducible from the current inventory and is
+not used for this rerun.
 
 These are direct observations from the local logs, not proof of unnecessary
 work or measured waste. The smoke test is evidence that the reader and rules
@@ -227,61 +236,62 @@ can operate on real Codex envelopes; synthetic fixtures remain the correctness
 oracle.
 **Follow-up investigation — PR2 remains open**
 
-- [ ] Audit real `function_call`/`function_call_output` pairing for failed shell
+- [x] Audit real `function_call`/`function_call_output` pairing for failed shell
   commands, including delayed or interleaved outputs and output formats that
   report failure without the currently recognized exit-status wording.
-- [ ] Add fixtures for every observed failure-status envelope and prove the
+- [x] Add fixtures for every observed failure-status envelope and prove the
   failure fingerprint is attached to the correct call without retaining output
   bodies.
-- [ ] Add a diagnostic count for repeated command candidates suppressed because
+- [x] Add a diagnostic count for repeated command candidates suppressed because
   one or more attempts lack required failure evidence.
-- [ ] Deep-dive `R-TEST-01` against real Codex test invocations, including
+- [x] Deep-dive `R-TEST-01` against real Codex test invocations, including
   `pytest`, `unittest`, repository-specific test wrappers, and commands whose
   test intent is available only in structured tool arguments.
-- [ ] Verify test-command normalization across equivalent invocations and ensure
+- [x] Verify test-command normalization across equivalent invocations and ensure
   changed commands start new sequences.
-- [ ] Verify successful mutation boundaries from `patch_apply_end` and successful
+- [x] Verify successful mutation boundaries from `patch_apply_end` and successful
   shell commands, including mutations between test attempts and interleaved
   read/tool events.
-- [ ] Run a focused 20-day real-log review for test candidates and suppressed
+- [x] Run a focused 20-day real-log review for test candidates and suppressed
   retry candidates before closing PR2.
 
 **Follow-up acceptance**
 
-- [ ] A repeated failed command is reported when both attempts have reliable
+- [x] A repeated failed command is reported when both attempts have reliable
   failure evidence, regardless of the recognized output envelope wording.
-- [ ] Missing failure evidence remains unavailable and is distinguishable from
+- [x] Missing failure evidence remains unavailable and is distinguishable from
   zero retry occurrences.
-- [ ] `R-TEST-01` identifies actual repeated test commands without treating
+- [x] `R-TEST-01` identifies actual repeated test commands without treating
   generic shell commands as tests.
-- [ ] A successful observed mutation always ends test churn, while unrelated
+- [x] A successful observed mutation always ends test churn, while unrelated
   reads and tool events do not accidentally end it.
-- [ ] The smoke-test record is updated with confirmed findings and suppressed
+- [x] The smoke-test record is updated with confirmed findings and suppressed
   candidates separately.
+  
 ### PR 3 - Transparent frequency signals
 
 **Files**
 
-- [ ] Extend `burnrate/analyser/patterns.py`.
-- [ ] Extend `burnrate/analyser/pattern_catalog.py`.
-- [ ] Add `tests/test_pattern_signals.py`.
+- [x] Extend `burnrate/analyser/patterns.py`.
+- [x] Extend `burnrate/analyser/pattern_catalog.py`.
+- [x] Add `tests/test_pattern_signals.py`.
 
 **Implementation**
 
-- [ ] Add `R-EXP-01`, `R-SESSION-01`, `R-TOKEN-01`, `R-OUT-01`,
+- [x] Add `R-EXP-01`, `R-SESSION-01`, `R-TOKEN-01`, `R-OUT-01`,
   `R-SUBAGENT-01`, and `R-WEB-01`.
-- [ ] Define every threshold as a named constant and catalog field.
-- [ ] Count session-level rules as affected sessions.
-- [ ] Count web calls and large outputs as direct occurrences.
-- [ ] Keep the classification visibly `frequency_signal`.
+- [x] Define every threshold as a named constant and catalog field.
+- [x] Count session-level rules as affected sessions.
+- [x] Count web calls and large outputs as direct occurrences.
+- [x] Keep the classification visibly `frequency_signal`.
 
 **Acceptance**
 
-- [ ] Every threshold has immediately-below and at-threshold fixtures.
-- [ ] Duration and token calculations are session-local.
-- [ ] Missing timestamp, token, output, lineage, or web telemetry suppresses
+- [x] Every threshold has immediately-below and at-threshold fixtures.
+- [x] Duration and token calculations are session-local.
+- [x] Missing timestamp, token, output, lineage, or web telemetry suppresses
   only its dependent rule.
-- [ ] No signal is described as avoidable or wasteful.
+- [x] No signal is described as avoidable or wasteful.
 
 **Excluded:** cache-discontinuity interpretation, personal baselines, threshold
 tuning, scores, grades, and estimated savings.
