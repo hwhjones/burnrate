@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from burnrate.analyser.patterns import PatternReader
+from burnrate.analyser.patterns import PatternReader, SESSION_WORK_TOKEN_THRESHOLD, detect_observations
 
 
 class PatternReaderTests(unittest.TestCase):
@@ -62,6 +62,56 @@ class PatternReaderTests(unittest.TestCase):
             by_session = {session.session_id: session for session in scan.sessions}
             self.assertEqual(by_session["a"].final_token_usage["r"]["usage"]["input_tokens"], 20)
             self.assertEqual(by_session["b"].final_token_usage["r"]["usage"]["input_tokens"], 30)
+
+    def test_session_state_spans_files_with_monotonic_sequence_and_output_pairing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            self.write_records(directory, "01.jsonl", [
+                {"session_id": "a", "payload": {"type": "function_call", "name": "shell_command", "call_id": "c", "arguments": json.dumps({"command": "tool --check"})}},
+            ])
+            self.write_records(directory, "02.jsonl", [
+                {"session_id": "a", "payload": {"type": "function_call_output", "call_id": "c", "output": {"exit_code": 1}}},
+                {"session_id": "a", "payload": {"type": "read_file", "path": "later.py"}},
+            ])
+            session = PatternReader(str(directory)).scan().sessions[0]
+            self.assertEqual([fact.sequence for fact in session.facts], [0, 2])
+            self.assertEqual(session.tool_output_events[0].sequence, 1)
+            self.assertIsNotNone(session.facts[0].failure_fingerprint)
+
+    def test_native_web_lifecycle_is_one_logical_occurrence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = self.write_records(Path(temp_dir), "web.jsonl", [
+                {"session_id": "a", "payload": {"type": "web_search_call", "call_id": "w1"}},
+                {"session_id": "a", "payload": {"type": "web_search_end", "call_id": "w1", "output": "results"}},
+            ])
+            session = PatternReader(str(path)).scan().sessions[0]
+            self.assertEqual(len(session.facts), 1)
+            self.assertTrue(session.facts[0].web_call)
+            results = detect_observations(PatternReader(str(path)).scan())
+            self.assertEqual(next(item for item in results if item["id"] == "R-WEB-01")["count"], 1)
+
+    def test_read_target_rejects_switches_and_variables(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = self.write_records(Path(temp_dir), "reads.jsonl", [
+                {"session_id": "a", "payload": {"type": "function_call", "name": "shell_command", "arguments": json.dumps({"command": "Get-Content -Raw"})}},
+                {"session_id": "a", "payload": {"type": "function_call", "name": "shell_command", "arguments": json.dumps({"command": "Get-Content -Raw -LiteralPath app.py"})}},
+                {"session_id": "a", "payload": {"type": "function_call", "name": "shell_command", "arguments": json.dumps({"command": "Get-Content $path"})}},
+            ])
+            facts = PatternReader(str(path)).scan().sessions[0].facts
+            self.assertIsNone(facts[0].target)
+            self.assertEqual(facts[1].target, "app.py")
+            self.assertIsNone(facts[2].target)
+
+    def test_token_snapshots_without_request_id_use_one_maximum_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = self.write_records(Path(temp_dir), "tokens.jsonl", [
+                {"session_id": "a", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 20}}}},
+                {"session_id": "a", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": SESSION_WORK_TOKEN_THRESHOLD}}}},
+                {"session_id": "a", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": SESSION_WORK_TOKEN_THRESHOLD}}}},
+            ])
+            session = PatternReader(str(path)).scan().sessions[0]
+            self.assertEqual(session.token_accounting_source, "max_snapshot_without_request_id")
+            self.assertEqual(len(session.anonymous_token_snapshots), 3)
 
     def test_malformed_records_do_not_stop_reading(self):
         with tempfile.TemporaryDirectory() as temp_dir:

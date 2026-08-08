@@ -46,6 +46,43 @@ burnrate --parser codex
 burnrate --parser claude
 ```
 
+Run the opt-in Codex workflow pattern report with the preferred subcommand:
+
+```powershell
+python -m burnrate patterns
+python -m burnrate patterns --days 20
+python -m burnrate patterns --days 20 --explain
+python -m burnrate patterns --days 20 --json
+```
+
+The `burnrate` executable is available after installing this checkout into the
+active environment:
+
+```powershell
+python -m pip install -e .
+burnrate patterns --days 20
+```
+
+If PowerShell still reports that `burnrate` is not recognized, use
+`python -m burnrate ...`; it does not depend on the Scripts directory being on
+`PATH`.
+
+The report is designed to produce one workflow experiment worth trying, then a
+seven-day command for checking the next scan. It reports observations and
+frequency signals; it does not measure waste, code correctness, or successful
+verification. The compatibility form `burnrate --patterns` accepts the same
+pattern options.
+
+For a reproducible twenty-day local smoke test against Codex logs:
+
+```powershell
+python -m burnrate patterns --parser codex --days 20 --log-path "$HOME/.codex/sessions"
+```
+
+Use `--explain` when you need thresholds, telemetry coverage, model/stream
+scope, and source references. JSON is complete and is not capped to the three
+patterns shown in the default text.
+
 It can also be run as a Python module:
 
 ```powershell

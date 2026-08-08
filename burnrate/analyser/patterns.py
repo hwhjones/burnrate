@@ -15,6 +15,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .pattern_catalog import (
+    RULE_CATALOG as CATALOG_RULES,
+    EXPLORATION_CALL_THRESHOLD,
+    SESSION_DURATION_SECONDS_THRESHOLD,
+    SESSION_WORK_TOKEN_THRESHOLD,
+    LARGE_OUTPUT_CHAR_THRESHOLD,
+    SUBAGENT_SPAWN_THRESHOLD,
+    CONTEXT_GROWTH_MIN_TOKENS, CONTEXT_GROWTH_RUN_LENGTH,
+    CONTEXT_UTILIZATION_THRESHOLD, UNCACHED_INPUT_THRESHOLD,
+    CARRY_INPUT_INCREASE_THRESHOLD,
+    CONTEXT_SNAPSHOT_RETENTION_LIMIT, CONTEXT_OUTPUT_EVENT_RETENTION_LIMIT,
+)
+from .pattern_context import ContextSnapshot, ToolOutputEvent, detect_context_signals, normalize_token_snapshot
+
 
 _READ_TYPES = {"read", "read_file", "file_read", "open_file"}
 _MUTATION_TYPES = {"mutation", "patch", "file_write", "write_file", "patch_apply_end"}
@@ -22,22 +36,7 @@ _READ_COMMAND_RE = re.compile(r"(?:Get-Content|cat|type|head|tail|sed)(?:\s|$)",
 _TEST_RE = re.compile(r"(?:^|\s)(?:pytest|py\.test|unittest|npm\s+test|cargo\s+test|go\s+test)(?:\s|$)", re.I)
 _TEST_MODULE_RE = re.compile(r"\b(?:python(?:3)?|py)\s+-m\s+(pytest|unittest)\b", re.I)
 _MUTATION_RE = re.compile(r"(?:apply_patch|git\s+(?:apply|commit)|(?:set|add|out)-content|touch\s|mkdir\s|npm\s+install)", re.I)
-EXPLORATION_CALL_THRESHOLD = 4
-SESSION_DURATION_SECONDS_THRESHOLD = 35 * 60
-SESSION_WORK_TOKEN_THRESHOLD = 50_000
-LARGE_OUTPUT_CHAR_THRESHOLD = 8_000
-SUBAGENT_SPAWN_THRESHOLD = 6
-RULE_CATALOG = {
-    "R-READ-01": {"name": "Repeated file reads", "classification": "observation", "explanation": "The same normalized file was read more than once.", "try_next_experiment": "Reference the earlier read when it remains current."},
-    "R-RETRY-01": {"name": "Ineffective retries", "classification": "observation", "explanation": "The same failed command and failure fingerprint recurred consecutively.", "try_next_experiment": "Change the command or inspect the failure before retrying it."},
-    "R-TEST-01": {"name": "Test churn", "classification": "observation", "explanation": "The same test command recurred without an observed successful mutation.", "try_next_experiment": "Make or verify the smallest mutation before rerunning the same test."},
-    "R-EXP-01": {"name": "Exploration pile-up", "classification": "frequency_signal", "threshold": EXPLORATION_CALL_THRESHOLD, "count_scope": "turn_occurrences", "explanation": "At least four read or discovery calls occurred in one turn.", "try_next_experiment": "Review the observed exploration sequence and choose the next step."},
-    "R-SESSION-01": {"name": "Long session", "classification": "frequency_signal", "threshold": SESSION_DURATION_SECONDS_THRESHOLD, "count_scope": "affected_sessions", "explanation": "The observed session duration reached 35 minutes.", "try_next_experiment": "Review the session timeline and decide whether to continue."},
-    "R-TOKEN-01": {"name": "Token pile-up", "classification": "frequency_signal", "threshold": SESSION_WORK_TOKEN_THRESHOLD, "count_scope": "affected_sessions", "explanation": "Observed session work tokens reached 50,000.", "try_next_experiment": "Review the session token usage alongside its work."},
-    "R-OUT-01": {"name": "Large tool output", "classification": "frequency_signal", "threshold": LARGE_OUTPUT_CHAR_THRESHOLD, "count_scope": "direct_occurrences", "explanation": "One observed tool result reached 8,000 characters.", "try_next_experiment": "Review the source reference for the large tool result."},
-    "R-SUBAGENT-01": {"name": "Subagent-heavy session", "classification": "frequency_signal", "threshold": SUBAGENT_SPAWN_THRESHOLD, "count_scope": "affected_sessions", "explanation": "At least six lineage-backed subagent spawns occurred in one session.", "try_next_experiment": "Review the observed subagent lineage and session context."},
-    "R-WEB-01": {"name": "Web-heavy session", "classification": "frequency_signal", "count_scope": "direct_occurrences", "explanation": "Observed web search or fetch calls occurred in the session.", "try_next_experiment": "Review the observed web call sequence and its context."},
-}
+RULE_CATALOG = CATALOG_RULES
 
 
 class PatternFact:
@@ -74,6 +73,16 @@ class SessionFacts:
         self.has_missing_timestamp = False
         self.facts: list[PatternFact] = []
         self.final_token_usage: dict[str, dict[str, Any]] = {}
+        self.anonymous_token_snapshots: list[dict[str, int]] = []
+        self.cumulative_session_tokens: int | None = None
+        self.token_accounting_source: str | None = None
+        self.has_turn_telemetry = False
+        self.has_lineage_telemetry = False
+        self.has_web_telemetry = False
+        self.current_model: str | None = None
+        self.model_epoch = 0
+        self.context_snapshots: list[ContextSnapshot] = []
+        self.tool_output_events: list[ToolOutputEvent] = []
 
 
 class PatternScan:
@@ -83,7 +92,12 @@ class PatternScan:
         self.files_scanned = 0
         self.malformed_records = 0
         self.file_errors: list[dict[str, str]] = []
-        self.diagnostics: dict[str, int] = {"retry_candidates_suppressed": 0}
+        self.diagnostics: dict[str, Any] = {
+            "retry_candidates_suppressed": 0,
+            "frequency_turn_coverage_missing": 0,
+            "frequency_lineage_coverage_missing": 0,
+            "frequency_web_coverage_missing": 0,
+        }
 
 
 class PatternReader:
@@ -100,10 +114,13 @@ class PatternReader:
         sessions: dict[str, SessionFacts] = {}
         result = PatternScan(status="complete")
 
+        sequence = [0]
+        pending_calls: dict[tuple[str, str], PatternFact] = {}
+        web_calls: dict[tuple[str, str], PatternFact] = {}
         for path in files:
             result.files_scanned += 1
             try:
-                self._read_file(path, sessions, result)
+                self._read_file(path, sessions, result, sequence, pending_calls, web_calls)
             except (OSError, UnicodeError) as error:
                 result.file_errors.append({
                     "filepath": str(path),
@@ -139,10 +156,10 @@ class PatternReader:
             return sorted(files), True
         return sorted(files), False
 
-    def _read_file(self, path: Path, sessions: dict[str, SessionFacts], result: PatternScan) -> None:
+    def _read_file(self, path: Path, sessions: dict[str, SessionFacts], result: PatternScan,
+                   sequence: list[int], pending_calls: dict[tuple[str, str], PatternFact],
+                   web_calls: dict[tuple[str, str], PatternFact]) -> None:
         resolved = str(path.resolve())
-        sequence = 0
-        pending_calls: dict[tuple[str, str], PatternFact] = {}
         with path.open("r", encoding="utf-8-sig") as handle:
             for line_number, raw_line in enumerate(handle, start=1):
                 if not raw_line.strip():
@@ -168,33 +185,105 @@ class PatternReader:
                     session.first_timestamp = min(filter(None, [session.first_timestamp, timestamp]), default=timestamp)
                     session.last_timestamp = max(filter(None, [session.last_timestamp, timestamp]), default=timestamp)
 
+                if _telemetry_value(record, payload, "turn_id", "turnId", "turn") is not None:
+                    session.has_turn_telemetry = True
+                if _telemetry_value(record, payload, "lineage", "parent_session_id", "parent_call_id", "parentCallId") is not None:
+                    session.has_lineage_telemetry = True
+                if (_telemetry_value(record, payload, "web_call", "web", "is_web") is not None or
+                        _is_web_lifecycle(_string(payload.get("type")))):
+                    session.has_web_telemetry = True
+
+                event_type = _string(payload.get("type")) or _string(record.get("type"))
+                if event_type == "turn_context":
+                    context_model = _normalize_text(payload.get("model"))
+                    if context_model and session.current_model != context_model:
+                        if session.current_model is not None:
+                            session.model_epoch += 1
+                        session.current_model = context_model
+
                 if payload.get("type") == "token_count":
                     self._retain_token_snapshot(record, payload, session, resolved, line_number, timestamp)
+                    explicit_model = _model_from_token_record(record, payload)
+                    if explicit_model and session.current_model != explicit_model:
+                        if session.current_model is not None:
+                            session.model_epoch += 1
+                        session.current_model = explicit_model
+                    snapshot = normalize_token_snapshot(
+                        record, payload, session_id, sequence[0], resolved, line_number, timestamp,
+                        model_id_override=session.current_model,
+                        stream_epoch=session.model_epoch,
+                    )
+                    if snapshot is not None:
+                        session.context_snapshots.append(snapshot)
+                        if len(session.context_snapshots) > CONTEXT_SNAPSHOT_RETENTION_LIMIT:
+                            del session.context_snapshots[0]
+                        sequence[0] += 1
+
+                event_type = _string(payload.get("type")) or _string(record.get("type"))
+                if _is_web_lifecycle(event_type) and event_type == "web_search_end":
+                    call_id = _string(payload.get("call_id"))
+                    if call_id and (session_id, call_id) in web_calls:
+                        web_fact = web_calls[(session_id, call_id)]
+                        output = _telemetry_value(record, payload, "output", "result")
+                        if output is not None:
+                            web_fact.output_chars = _output_length(output)
+                            session.tool_output_events.append(ToolOutputEvent(
+                                session_id, sequence[0], resolved, line_number, timestamp,
+                                _output_length(output) or 0, session.current_model,
+                                session.model_epoch,
+                            ))
+                            if len(session.tool_output_events) > CONTEXT_OUTPUT_EVENT_RETENTION_LIMIT:
+                                del session.tool_output_events[0]
+                            sequence[0] += 1
+                        continue
 
                 if payload.get("type") in ("function_call_output", "custom_tool_call_output"):
                     call_id = _string(payload.get("call_id"))
                     if call_id and (session_id, call_id) in pending_calls:
                         _apply_call_output(pending_calls[(session_id, call_id)], payload.get("output"))
+                    output = payload.get("output")
+                    if output is not None:
+                        session.tool_output_events.append(ToolOutputEvent(
+                            session_id, sequence[0], resolved, line_number, timestamp,
+                            _output_length(output) or 0, session.current_model,
+                            session.model_epoch,
+                        ))
+                        if len(session.tool_output_events) > CONTEXT_OUTPUT_EVENT_RETENTION_LIMIT:
+                            del session.tool_output_events[0]
+                        sequence[0] += 1
                     continue
 
-                fact = _fact_from_record(record, payload, session_id, sequence, resolved, line_number, timestamp)
+                fact = _fact_from_record(record, payload, session_id, sequence[0], resolved, line_number, timestamp)
                 if fact is not None:
                     session.facts.append(fact)
-                    sequence += 1
+                    sequence[0] += 1
                     call_id = _string(payload.get("call_id"))
                     if call_id and payload.get("type") in ("function_call", "custom_tool_call"):
                         pending_calls[(session_id, call_id)] = fact
+                    if call_id and event_type == "web_search_call":
+                        web_calls[(session_id, call_id)] = fact
 
     @staticmethod
     def _retain_token_snapshot(record: dict[str, Any], payload: dict[str, Any], session: SessionFacts,
                                filepath: str, line: int, timestamp: str | None) -> None:
         info = payload.get("info")
         usage = info.get("last_token_usage") if isinstance(info, dict) else None
+        cumulative = _cumulative_session_total(info, payload, record)
+        if cumulative is not None:
+            session.cumulative_session_tokens = max(session.cumulative_session_tokens or 0, cumulative)
+            session.token_accounting_source = "cumulative_session_total"
+            return
         if not isinstance(usage, dict):
             return
-        request_id = (_string(record.get("requestId")) or
-                      _string(payload.get("requestId")) or f"{filepath}:{line}")
+        request_id = _string(record.get("requestId")) or _string(payload.get("requestId"))
         candidate = {"timestamp": timestamp, "source": {"filepath": filepath, "line": line}, "usage": _safe_usage(usage)}
+        if request_id is None:
+            # Without a request ID, snapshots cannot be safely assigned to
+            # requests. Treat them as cumulative and retain the largest total;
+            # summing them would count repeated snapshots as new work.
+            session.anonymous_token_snapshots.append(candidate["usage"])
+            session.token_accounting_source = "max_snapshot_without_request_id"
+            return
         current = session.final_token_usage.get(request_id)
         if current is None or (candidate["timestamp"] or "") >= (current["timestamp"] or ""):
             session.final_token_usage[request_id] = candidate
@@ -226,7 +315,7 @@ def _fact_from_record(record: dict[str, Any], payload: dict[str, Any], session_i
         kind = "test"
     elif command:
         kind = "command"
-    elif event_type in ("function_call", "custom_tool_call") or (event_type and re.search(r"\b(?:web_search|web_fetch|browser_search|browser_fetch|spawn_subagent|spawn_agent|subagent_spawn)\b", event_type, re.I)):
+    elif event_type in ("function_call", "custom_tool_call", "web_search", "web_fetch", "browser_search", "browser_fetch") or _is_web_lifecycle(event_type) or (event_type and re.search(r"\b(?:spawn_subagent|spawn_agent|subagent_spawn)\b", event_type, re.I)):
         kind = "command"
     else:
         return None
@@ -248,10 +337,44 @@ def _fact_from_record(record: dict[str, Any], payload: dict[str, Any], session_i
                        failure_fingerprint, successful_mutation, turn_id, output_chars, web_call, subagent_spawn)
 
 
-def _usage_total(usage: dict[str, int]) -> int:
-    if 'total_tokens' in usage:
-        return usage['total_tokens']
-    return sum(usage.values())
+def _usage_total(usage: dict[str, int]) -> int | None:
+    explicit = usage.get("total_tokens")
+    if explicit is not None:
+        return explicit
+    input_tokens = usage.get("input_tokens")
+    cached_input = usage.get("cached_input_tokens", 0)
+    output_tokens = usage.get("output_tokens")
+    if input_tokens is not None:
+        if cached_input > input_tokens:
+            return None
+        total = input_tokens
+    else:
+        total = 0
+    if output_tokens is not None:
+        total += output_tokens
+    elif usage.get("reasoning_output_tokens") is not None:
+        total += usage["reasoning_output_tokens"]
+    return total if total else None
+
+
+def _cumulative_session_total(info: Any, payload: dict[str, Any], record: dict[str, Any]) -> int | None:
+    for source in (info, payload, record):
+        if not isinstance(source, dict):
+            continue
+        for key in ("total_tokens", "session_total_tokens", "cumulative_tokens"):
+            value = source.get(key)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                return value
+        for key in ("total_token_usage", "session_token_usage", "cumulative_token_usage"):
+            value = source.get(key)
+            if isinstance(value, dict):
+                # Component counters overlap (cached input is included in
+                # input, and reasoning is included in output). Only an
+                # explicit provider total is safe to treat as cumulative.
+                total = value.get("total_tokens")
+                if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
+                    return total
+    return None
 
 
 def _safe_usage(usage: dict[str, Any]) -> dict[str, int]:
@@ -278,6 +401,16 @@ def _normalize_text(value: Any) -> str | None:
     return re.sub(r"\s+", " ", value).strip() if isinstance(value, str) and value.strip() else None
 
 
+def _model_from_token_record(record: dict[str, Any], payload: dict[str, Any]) -> str | None:
+    info = payload.get("info")
+    if isinstance(info, dict):
+        model = _normalize_text(info.get("model"))
+        if model:
+            return model
+    return (_normalize_text(payload.get("model")) or
+            _normalize_text(record.get("model")))
+
+
 def _normalize_command(value: Any) -> str | None:
     value = _normalize_text(value)
     if not value:
@@ -290,7 +423,7 @@ def _normalize_command(value: Any) -> str | None:
 
 def _normalize_target(value: Any) -> str | None:
     value = _string(value)
-    if not value or value.startswith("$") or "${" in value:
+    if not value or value.startswith(("$", "-")) or "${" in value:
         return None
     return value.replace("\\", "/")
 
@@ -317,8 +450,14 @@ def _is_discovery(fact: PatternFact) -> bool:
 def _is_web_call(event_type: str | None, name: str | None, payload: dict[str, Any], record: dict[str, Any]) -> bool:
     if _telemetry_value(record, payload, "web_call", "web", "is_web") is True:
         return True
+    if _is_web_lifecycle(event_type):
+        return True
     text = " ".join(filter(None, (event_type, name, _string(payload.get("tool_name")))))
     return bool(re.search(r"\b(?:web_search|web_fetch|web\.run|browser_search|browser_fetch)\b", text, re.I))
+
+
+def _is_web_lifecycle(event_type: str | None) -> bool:
+    return event_type in {"web_search_call", "web_search_end"}
 
 def _is_subagent_spawn(event_type: str | None, name: str | None, payload: dict[str, Any], record: dict[str, Any]) -> bool:
     if _telemetry_value(record, payload, "subagent_spawn", "spawned_subagent", "is_subagent_spawn") is True:
@@ -341,8 +480,22 @@ def _detect_frequency_signals(session: SessionFacts) -> list[dict[str, Any]]:
         if duration>=SESSION_DURATION_SECONDS_THRESHOLD:
             fact=session.facts[-1] if session.facts else PatternFact(session.session_id,0,"",0)
             occurrences.append(_occurrence("R-SESSION-01",session.session_id,fact,duration_seconds=int(duration)))
-    work_tokens=sum(_usage_total(item["usage"]) for item in session.final_token_usage.values())
-    if session.final_token_usage and work_tokens>=SESSION_WORK_TOKEN_THRESHOLD:
+    if session.cumulative_session_tokens is not None:
+        work_tokens = session.cumulative_session_tokens
+    else:
+        known_totals = [
+            total for item in session.final_token_usage.values()
+            if (total := _usage_total(item["usage"])) is not None
+        ]
+        work_tokens = sum(known_totals)
+        if session.anonymous_token_snapshots:
+            anonymous_totals = [
+                total for item in session.anonymous_token_snapshots
+                if (total := _usage_total(item)) is not None
+            ]
+            work_tokens += max(anonymous_totals, default=0)
+    if (session.final_token_usage or session.anonymous_token_snapshots or
+            session.cumulative_session_tokens is not None) and work_tokens>=SESSION_WORK_TOKEN_THRESHOLD:
         fact=session.facts[-1] if session.facts else PatternFact(session.session_id,0,"",0)
         occurrences.append(_occurrence("R-TOKEN-01",session.session_id,fact,tokens=work_tokens))
     for fact in session.facts:
@@ -359,6 +512,9 @@ def detect_observations(scan: PatternScan) -> list[dict[str, Any]]:
     """Detect the three direct observations from a PatternScan."""
     occurrences = []
     scan.diagnostics["retry_candidates_suppressed"] = 0
+    scan.diagnostics["frequency_turn_coverage_missing"] = 0
+    scan.diagnostics["frequency_lineage_coverage_missing"] = 0
+    scan.diagnostics["frequency_web_coverage_missing"] = 0
     for session in scan.sessions:
         occurrences.extend(_detect_repeated_reads(session))
         retry_occurrences, suppressed = _detect_retries(session)
@@ -366,6 +522,16 @@ def detect_observations(scan: PatternScan) -> list[dict[str, Any]]:
         scan.diagnostics["retry_candidates_suppressed"] += suppressed
         occurrences.extend(_detect_test_churn(session))
         occurrences.extend(_detect_frequency_signals(session))
+        context_occurrences, context_diagnostics = detect_context_signals(session)
+        occurrences.extend(context_occurrences)
+        for key, value in context_diagnostics.items():
+            scan.diagnostics[key] = scan.diagnostics.get(key, 0) + value
+        if session.facts and not session.has_turn_telemetry:
+            scan.diagnostics["frequency_turn_coverage_missing"] += 1
+        if session.facts and not session.has_lineage_telemetry:
+            scan.diagnostics["frequency_lineage_coverage_missing"] += 1
+        if session.facts and not session.has_web_telemetry:
+            scan.diagnostics["frequency_web_coverage_missing"] += 1
     results = []
     for rule_id in RULE_CATALOG:
         rule_occurrences = [item for item in occurrences if item["rule_id"] == rule_id]
@@ -383,6 +549,26 @@ def detect_observations(scan: PatternScan) -> list[dict[str, Any]]:
             "try_next_experiment": metadata["try_next_experiment"],
             "examples": [item["example"] for item in rule_occurrences[:3]],
         })
+        if "unit" in metadata:
+            result = results[-1]
+            result.update({
+                "threshold": metadata.get("threshold"),
+                "secondary_threshold": metadata.get("secondary_threshold"),
+                "unit": metadata["unit"],
+                "telemetry_required": metadata.get("telemetry_required", []),
+                "telemetry_available": all(
+                    item["example"].get("telemetry_available", False) for item in rule_occurrences
+                ),
+            })
+            if rule_id.startswith(("R-CTX-", "R-CACHE-", "R-CARRY-")):
+                scopes = {
+                    (item["example"].get("model_id"), item["example"].get("stream_epoch"))
+                    for item in rule_occurrences
+                }
+                result["source_model_scope"] = [
+                    {"model_id": model_id, "stream_epoch": stream_epoch}
+                    for model_id, stream_epoch in sorted(scopes, key=lambda item: (str(item[0]), item[1]))
+                ]
     return sorted(results, key=lambda result: (-result["count"], result["id"]))
 
 
@@ -393,7 +579,9 @@ def _detect_repeated_reads(session: SessionFacts) -> list[dict[str, Any]]:
             by_target.setdefault(fact.target, []).append(fact)
     occurrences = []
     for target in sorted(by_target):
-        for fact in by_target[target][1:]:
+        # Treat the third read as the first actionable repeat; a second read
+        # can be a normal verification step.
+        for fact in by_target[target][2:]:
             occurrences.append(_occurrence("R-READ-01", session.session_id, fact, target=target))
     return occurrences
 
@@ -456,11 +644,28 @@ def _decode_arguments(value: Any) -> Any:
 
 
 def _target_from_command(command: str) -> str | None:
-    quoted = re.search(r"(?:Get-Content|cat|type|head|tail|sed)\s+(?:-LiteralPath\s+)?['\"]([^'\"]+)['\"]", command, re.I)
-    if quoted:
-        return _normalize_target(quoted.group(1))
-    unquoted = re.search(r"(?:Get-Content|cat|type|head|tail|sed)\s+(?:-LiteralPath\s+)?([^\s|;]+)", command, re.I)
-    return _normalize_target(unquoted.group(1)) if unquoted else None
+    match = re.search(r"(?:Get-Content|cat|type|head|tail|sed)\b(?P<args>.*)", command, re.I)
+    if not match:
+        return None
+    tokens = re.findall(r"'[^']*'|\"[^\"]*\"|[^\s|;]+", match.group("args"))
+    switches_with_values = {"-literalpath", "-path", "-filepath", "-include", "-exclude", "-filter", "-encoding"}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        unquoted = token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in "'\"" else token
+        lowered = unquoted.lower()
+        if lowered.startswith("-"):
+            if lowered in switches_with_values:
+                index += 1
+                if index >= len(tokens):
+                    return None
+                candidate = tokens[index]
+                candidate = candidate[1:-1] if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in "'\"" else candidate
+                return _normalize_target(candidate)
+            index += 1
+            continue
+        return _normalize_target(unquoted)
+    return None
 
 def _output_text(value: Any) -> str:
     if isinstance(value, str):

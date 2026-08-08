@@ -112,5 +112,55 @@ class PatternSignalTests(unittest.TestCase):
         result = self.ids(records)
         self.assertNotIn("R-SESSION-01", result)
         self.assertIn("R-WEB-01", result)
+
+    def test_missing_frequency_telemetry_is_reported_as_coverage_diagnostics(self):
+        records = [{"session_id": "a", "payload": {"type": "read_file", "path": "a.py"}}]
+        scan = PatternReader(str(self.write(records))).scan()
+        detect_observations(scan)
+        self.assertEqual(scan.diagnostics["frequency_turn_coverage_missing"], 1)
+        self.assertEqual(scan.diagnostics["frequency_lineage_coverage_missing"], 1)
+        self.assertEqual(scan.diagnostics["frequency_web_coverage_missing"], 1)
+
+    def test_cumulative_session_token_total_wins_over_repeated_snapshots(self):
+        records = [
+            {"session_id": "a", "payload": {"type": "token_count", "info": {"total_token_usage": {"total_tokens": SESSION_WORK_TOKEN_THRESHOLD}}}},
+            {"session_id": "a", "payload": {"type": "token_count", "info": {"total_token_usage": {"total_tokens": SESSION_WORK_TOKEN_THRESHOLD}}}},
+        ]
+        result = self.ids(records)
+        self.assertEqual(result["R-TOKEN-01"]["examples"][0]["tokens"], SESSION_WORK_TOKEN_THRESHOLD)
+
+    def test_repeat_three_week_scan_has_web_telemetry_and_no_raw_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            files = [
+                ("2026-08-01.jsonl", [
+                    {"session_id": "real", "timestamp": "2026-08-01T00:00:00Z", "payload": {"type": "web_search_call", "call_id": "w1"}},
+                    {"session_id": "real", "timestamp": "2026-08-01T00:00:01Z", "payload": {"type": "function_call", "name": "shell_command", "call_id": "r1", "arguments": json.dumps({"command": "Get-Content -Raw"})}},
+                ]),
+                ("2026-08-08.jsonl", [
+                    {"session_id": "real", "timestamp": "2026-08-08T00:00:00Z", "payload": {"type": "web_search_end", "call_id": "w1"}},
+                    {"session_id": "real", "timestamp": "2026-08-08T00:00:01Z", "payload": {"type": "web_search_call", "call_id": "w2"}},
+                ]),
+                ("2026-08-15.jsonl", [
+                    {"session_id": "real", "timestamp": "2026-08-15T00:00:00Z", "payload": {"type": "web_search_end", "call_id": "w2"}},
+                    {"session_id": "real", "timestamp": "2026-08-15T00:00:01Z", "payload": {"type": "web_search_call", "call_id": "w3"}},
+                ]),
+                ("2026-08-21.jsonl", [
+                    {"session_id": "real", "timestamp": "2026-08-21T00:00:00Z", "payload": {"type": "web_search_end", "call_id": "w3"}},
+                    {"session_id": "real", "timestamp": "2026-08-21T00:00:01Z", "payload": {"type": "web_search_call", "call_id": "w4"}},
+                    {"session_id": "real", "timestamp": "2026-08-21T00:00:02Z", "payload": {"type": "web_search_end", "call_id": "w4"}},
+                ]),
+            ]
+            for name, records in files:
+                (directory / name).write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+            scan = PatternReader(str(directory)).scan()
+            results = detect_observations(scan)
+            session = scan.sessions[0]
+            web = next(item for item in results if item["id"] == "R-WEB-01")
+            self.assertEqual(scan.files_scanned, 4)
+            self.assertEqual(web["count"], 4)
+            self.assertTrue(all(fact.web_call for fact in session.facts if fact.kind == "command" and fact.web_call))
+            self.assertFalse(any(fact.target == "-Raw" for fact in session.facts))
 if __name__ == "__main__":
     unittest.main()
