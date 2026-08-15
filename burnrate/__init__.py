@@ -6,6 +6,6 @@ from .main import run
 from .parsers import CodexParser, ClaudeParser, BaseParser
 
 try:
-    __version__ = metadata.version("burnrate")
+    __version__ = metadata.version("token-burnrate")
 except metadata.PackageNotFoundError:
     __version__ = "0+unknown"
