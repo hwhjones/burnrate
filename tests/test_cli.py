@@ -2,6 +2,7 @@ import unittest
 import runpy
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import burnrate.main as cli
@@ -123,6 +124,41 @@ class TestCLI(unittest.TestCase):
                 runpy.run_module("burnrate", run_name="__main__")
 
         self.assertEqual(raised.exception.code, 1)
+
+    def test_patterns_subcommand_runs_empty_codex_scan(self):
+        scan = SimpleNamespace(
+            status="empty", sessions=[], files_scanned=0, malformed_records=0,
+            diagnostics={},
+        )
+        with patch("burnrate.main.PatternReader") as reader:
+            reader.return_value.scan.return_value = scan
+            with patch("sys.argv", ["burnrate", "patterns", "--days", "20"]):
+                with redirect_stdout(StringIO()) as output:
+                    status = cli.run()
+        self.assertEqual(status, 0)
+        reader.assert_called_once_with(log_path=cli.DEFAULT_CODEX_LOG)
+        self.assertIn("No qualifying patterns were observed.", output.getvalue())
+
+    def test_patterns_compatibility_flag_uses_json(self):
+        scan = SimpleNamespace(
+            status="empty", sessions=[], files_scanned=0, malformed_records=0,
+            diagnostics={},
+        )
+        with patch("burnrate.main.PatternReader") as reader:
+            reader.return_value.scan.return_value = scan
+            with patch("sys.argv", ["burnrate", "--patterns", "--json"]):
+                with redirect_stdout(StringIO()) as output:
+                    status = cli.run()
+        self.assertEqual(status, 0)
+        self.assertIn('"schema_version": 3', output.getvalue())
+
+    def test_patterns_rejects_claude_parser(self):
+        with patch("sys.argv", ["burnrate", "patterns", "--parser", "claude"]):
+            with redirect_stderr(StringIO()) as error_output:
+                with self.assertRaises(SystemExit) as raised:
+                    cli.parse_args()
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("only --parser codex", error_output.getvalue())
 
 
 if __name__ == "__main__":

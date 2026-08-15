@@ -5,22 +5,19 @@ CODEX_PRICING_METADATA = {
     "currency": "USD",
     "source_unit": "per_million_tokens",
     "stored_unit": "per_token",
-    "verified_on": "2026-07-14",
+    "verified_on": "2026-08-16",
     "effective_date": None,
     "effective_date_status": "unknown",
 }
 
 CLAUDE_PRICING_METADATA = {
-    "source_url": (
-        "https://www-cdn.anthropic.com/files/4zrzovbb/website/"
-        "3684c2faafb97418665782cea0001f439f74b1d2.pdf"
-    ),
+    "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
     "currency": "USD",
     "source_unit": "per_million_tokens",
     "stored_unit": "per_token",
-    "verified_on": "2026-07-14",
-    "effective_date": "2026-05-27",
-    "effective_date_status": "published",
+    "verified_on": "2026-08-16",
+    "effective_date": None,
+    "effective_date_status": "unknown",
 }
 
 CODEX_PRICING = {
@@ -37,16 +34,39 @@ CODEX_PRICING = {
         "cache_write": 0.00000625,
     },
     "gpt-5.6-terra": {
-        "input": 0.0000025,
-        "output": 0.000015,
-        "cache_read": 0.00000025,
-        "cache_write": 0.000003125,
+        "input": 0.000002,
+        "output": 0.000012,
+        "cache_read": 0.0000002,
+        "cache_write": 0.0000025,
     },
     "gpt-5.6-luna": {
-        "input": 0.000001,
-        "output": 0.000006,
-        "cache_read": 0.0000001,
-        "cache_write": 0.00000125,
+        "input": 0.0000002,
+        "output": 0.0000012,
+        "cache_read": 0.00000002,
+        "cache_write": 0.00000025,
+    },
+    "gpt-5.3-codex": {
+        "input": 0.00000175,
+        "output": 0.000014,
+        "cache_read": 0.000000175,
+    },
+    "gpt-5.6-cyber": {
+        "input": 0.0000125,
+        "output": 0.000075,
+        "cache_read": 0.00000125,
+        "cache_write": 0.000015625,
+    },
+    "daybreak-blue-latest": {
+        "input": 0.000005,
+        "output": 0.000030,
+        "cache_read": 0.0000005,
+        "cache_write": 0.00000625,
+    },
+    "daybreak-red-latest": {
+        "input": 0.0000125,
+        "output": 0.000075,
+        "cache_read": 0.00000125,
+        "cache_write": 0.000015625,
     },
     "gpt-5.5": {
         "input": 0.000005,
@@ -58,6 +78,14 @@ CODEX_PRICING = {
         "output": 0.000180,
     },
     "gpt-5.4": {
+        "input": 0.0000025,
+        "output": 0.000015,
+        "cache_read": 0.00000025,
+    },
+    # Auto-review is a subscription reviewer label, not a published API SKU.
+    # OpenAI's current Codex telemetry does not expose its underlying model;
+    # use the observed GPT-5.4 routing as an explicitly qualified estimate.
+    "codex-auto-review": {
         "input": 0.0000025,
         "output": 0.000015,
         "cache_read": 0.00000025,
@@ -95,6 +123,36 @@ CODEX_PRICING = {
 }
 
 CLAUDE_PRICING = {
+    "claude-fable-5": {
+        "input": 0.000010,
+        "output": 0.000050,
+        "cache_read": 0.000001,
+        "cache_write": 0.0000125,
+    },
+    "claude-mythos-5": {
+        "input": 0.000010,
+        "output": 0.000050,
+        "cache_read": 0.000001,
+        "cache_write": 0.0000125,
+    },
+    "claude-opus-5": {
+        "input": 0.000005,
+        "output": 0.000025,
+        "cache_read": 0.0000005,
+        "cache_write": 0.00000625,
+    },
+    "claude-opus-4-8": {
+        "input": 0.000005,
+        "output": 0.000025,
+        "cache_read": 0.0000005,
+        "cache_write": 0.00000625,
+    },
+    "claude-opus-4-7": {
+        "input": 0.000005,
+        "output": 0.000025,
+        "cache_read": 0.0000005,
+        "cache_write": 0.00000625,
+    },
     "claude-opus-4-20250514": {
         "input": 0.000015,
         "output": 0.000075,
@@ -107,6 +165,42 @@ CLAUDE_PRICING = {
         "cache_read": 0.0000005,
         "cache_write": 0.00000625,
     },
+    "claude-opus-4-5": {
+        "input": 0.000005,
+        "output": 0.000025,
+        "cache_read": 0.0000005,
+        "cache_write": 0.00000625,
+    },
+    "claude-opus-4-1": {
+        "input": 0.000015,
+        "output": 0.000075,
+        "cache_read": 0.0000015,
+        "cache_write": 0.00001875,
+    },
+    "claude-opus-4": {
+        "input": 0.000015,
+        "output": 0.000075,
+        "cache_read": 0.0000015,
+        "cache_write": 0.00001875,
+    },
+    "claude-opus-3": {
+        "input": 0.000015,
+        "output": 0.000075,
+        "cache_read": 0.0000015,
+        "cache_write": 0.00001875,
+    },
+    "claude-sonnet-5": {
+        "input": 0.000002,
+        "output": 0.000010,
+        "cache_read": 0.0000002,
+        "cache_write": 0.0000025,
+    },
+    "claude-sonnet-4-6": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375,
+    },
     "claude-sonnet-4-20250514": {
         "input": 0.000003,
         "output": 0.000015,
@@ -118,6 +212,42 @@ CLAUDE_PRICING = {
         "output": 0.000015,
         "cache_read": 0.0000003,
         "cache_write": 0.00000375,
+    },
+    "claude-sonnet-4-5": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375,
+    },
+    "claude-sonnet-4": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375,
+    },
+    "claude-sonnet-3-7": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375,
+    },
+    "claude-sonnet-3-5": {
+        "input": 0.000003,
+        "output": 0.000015,
+        "cache_read": 0.0000003,
+        "cache_write": 0.00000375,
+    },
+    "claude-haiku-4-5": {
+        "input": 0.000001,
+        "output": 0.000005,
+        "cache_read": 0.0000001,
+        "cache_write": 0.00000125,
+    },
+    "claude-haiku-3-5": {
+        "input": 0.0000008,
+        "output": 0.000004,
+        "cache_read": 0.00000008,
+        "cache_write": 0.000001,
     },
     "claude-haiku-4-5-20251001": {
         "input": 0.000001,

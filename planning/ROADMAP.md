@@ -69,15 +69,17 @@ failure, maintenance cost, or accounting requirement.
 
 ## Milestone 1 - Codex workflow pattern scan (`v0.2.0`)
 
-Deliver the five-PR vertical slice in
+Deliver the six-stage vertical slice in
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 The release includes:
 
 - three direct observations: repeated reads, ineffective retries, and test
   churn;
-- six frequency signals: exploration pile-up, long session, token pile-up,
-  large output, subagent-heavy session, and web-heavy session;
+- ten frequency signals: exploration pile-up, long session, token pile-up,
+  large output, subagent-heavy session, web-heavy session, context pressure,
+  input-token growth, uncached input volume, and temporal output-to-input
+  relationship;
 - a concise frequency-ranked text report;
 - deterministic JSON and optional source examples;
 - one qualified experiment per displayed pattern;
@@ -85,6 +87,12 @@ The release includes:
 
 Success means users can run one command and understand the most frequent
 patterns without learning an evidence schema.
+
+The accepted `v0.2.0` baseline is 13 active rules (three direct observations
+and ten frequency signals) implemented across four focused analyser modules.
+The context module and its context/cache/carry signals are part of this
+release, not deferred scope. Further rule or module growth requires a new
+evidence-backed milestone decision.
 
 ## Milestone 2 - Validate usefulness (`v0.2.1`)
 
@@ -142,6 +150,130 @@ These remain uncommitted until the core scanner proves durable value:
 - generic event, detector, or provider plugin frameworks;
 - hosted services, accounts, telemetry, or cloud storage;
 - waste scores, grades, percentages, or fixed per-hit token estimates.
+
+### Deferred MVP - opt-in aggregate report relay
+
+If a small cloud or edge deployment is useful for validating operational cloud
+experience, build an opt-in relay around the existing local report rather than
+moving detection into the cloud. BurnRate remains the source of truth: it reads
+logs, applies rules, and constructs the report locally. The remote component
+accepts only an explicitly allowlisted aggregate envelope.
+
+**User outcome**
+
+A user can publish a privacy-safe report snapshot, retrieve their recent
+snapshots, and see direct period-to-period count changes. This is a deployment
+and longitudinal-access experiment, not a hosted analysis product and not proof
+that a workflow intervention caused a change.
+
+**Smallest useful architecture**
+
+```text
+BurnRate CLI
+  |  explicit `publish` of aggregate JSON over HTTPS with AWS IAM signing
+  v
+One Lambda Function URL
+  |  route request, validate schema, reject unknown fields
+  v
+One DynamoDB on-demand table with TTL
+  |
+  +--> GET recent snapshots
+  `--> GET direct count deltas
+```
+
+The default implementation uses one AWS Lambda function with a Function URL,
+one DynamoDB table in on-demand capacity mode, short-retention CloudWatch logs,
+and Terraform. It has no continuously running compute, provisioned database
+capacity, API Gateway, load balancer, NAT gateway, custom domain, or other
+resource with a standing application charge. Storage, requests, and function
+execution are paid only when used, subject to AWS free allowances.
+
+Use the Function URL's `AWS_IAM` authentication mode. The CLI signs requests
+with the operator's existing AWS credentials, avoiding Cognito, a user store,
+API-key infrastructure, and a paid secret-management service. One Lambda
+function handles the complete method and path contract.
+
+An alternative zero-cost-capped implementation can use a Cloudflare Worker and
+D1 on their free plans. Treat this as an edge variant, not the default: moving
+beyond its included limits may require a plan with a monthly minimum rather
+than strict pay-per-use billing. Both variants should retain the same narrow
+HTTP and data contracts.
+
+**MVP scope**
+
+- Add an explicit `burnrate publish` command; ordinary scans never contact a
+  network service.
+- Upload report schema version, an opaque installation ID, scan window, scan
+  completion status, session/file counts, rule IDs, native counts, affected
+  session counts, thresholds, and telemetry-coverage counts.
+- Exclude log records, prompts, responses, reasoning, tool-output bodies,
+  commands, paths, source references, repository names, model-generated text,
+  and experiments containing free text.
+- Validate an exact versioned request schema at the boundary and reject unknown
+  fields, oversized payloads, unsupported versions, and invalid count ranges.
+- Authenticate a single operator through AWS IAM and a least-privilege policy.
+  Do not add API tokens, registration, social login, organisations, or role
+  management.
+- Store snapshots under an opaque owner key with a short configurable TTL,
+  such as 30 days. Support deletion of all snapshots for that owner.
+- Make uploads idempotent using a locally generated report ID or content hash.
+- Expose only `POST /reports`, `GET /reports`, `GET /reports/{id}`, and
+  `DELETE /reports`. Calculate deltas from matching rule IDs and preserve each
+  rule's native unit rather than creating a score.
+- Return unavailable or incompatible comparisons explicitly when schema,
+  window, threshold, or telemetry coverage differs.
+
+**Operational implementation**
+
+- Define the Function URL, one Lambda function, one DynamoDB on-demand table,
+  TTL policy, short log retention, cost alarm, and least-privilege permissions
+  in Terraform.
+- Deploy through a small CI pipeline with unit tests, schema-contract tests,
+  an infrastructure validation step, and one disposable portfolio environment.
+  Use CI workload identity where available instead of stored cloud keys.
+- Record request IDs, latency, status, validation failures, throttling, and
+  aggregate service errors without logging request bodies or credentials. Use
+  standard Lambda metrics and short-retention structured logs; do not create a
+  custom paid dashboard.
+- Add payload limits, reserved-concurrency protection, encryption in transit
+  and at rest, dependency scanning, and a disposable-data policy. Do not add a
+  VPC or NAT gateway.
+- Publish a small cost budget and alarm. The design must have no minimum monthly
+  application-service commitment and no continuously running compute.
+
+**Validation and acceptance**
+
+- A fresh infrastructure deployment can be created and destroyed from the
+  documented commands without manual console configuration.
+- A local fixture can publish, retrieve, compare, and delete snapshots through
+  the deployed endpoint.
+- Contract tests prove that raw logs, paths, commands, source examples, and
+  unexpected fields cannot be accepted or persisted.
+- Repeating the same upload does not create a duplicate snapshot.
+- Expired and explicitly deleted snapshots are no longer retrievable.
+- Standard metrics, logs, and a cost alarm expose failed requests, throttling,
+  latency, and unexpected spend without capturing report contents.
+- A short architecture note records the threat model, privacy boundary,
+  provider cost, deployment trade-offs, and evidence that local reporting still
+  works with the network unavailable.
+
+**Deliberately excluded from the MVP**
+
+- raw-log upload or server-side pattern detection;
+- a multi-user web application, teams, sharing, billing, or subscriptions;
+- server-generated coaching, recommendations, rankings, or waste scores;
+- cross-user benchmarks or training data;
+- background upload, notifications, or automatic telemetry;
+- indefinite retention or a generic event-ingestion platform;
+- API Gateway, load balancers, containers, virtual machines, VPC networking,
+  NAT gateways, custom domains, WAF, Cognito, or paid secret storage;
+- separate permanent development and production environments, custom
+  dashboards, cross-region replication, and point-in-time recovery.
+
+This MVP is successful if it demonstrates a secure, observable, reproducible
+cloud delivery path while preserving BurnRate's local-first product boundary.
+It should remain deferred until the local report is validated or until the
+deployment itself is the explicit learning objective.
 
 Deferred does not mean forbidden forever. It means a concrete user need must
 justify reintroducing the complexity.
