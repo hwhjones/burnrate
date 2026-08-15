@@ -323,6 +323,34 @@ class TestCodexParser(unittest.TestCase):
         self.assertIn("gpt-unknown", output)
         self.assertIn("incomplete", output)
 
+    def test_auto_review_estimate_is_marked_in_summary(self):
+        """Auto-review API-equivalent estimates are visibly marked."""
+        test_filename = self.test_dir / "mock_codex_auto_review.jsonl"
+        self._create_mock_log(test_filename, [{
+            "type": "event_msg",
+            "timestamp": "2026-05-25T20:00:00Z",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "model": "codex-auto-review",
+                    "last_token_usage": {
+                        "input_tokens": 100,
+                        "cached_input_tokens": 20,
+                        "output_tokens": 30,
+                    },
+                },
+            },
+        }])
+
+        parser = CodexParser(log_path=str(test_filename))
+        parser.parse()
+        with patch("sys.stdout", new=StringIO()) as fake_out:
+            parser.summary()
+        output = fake_out.getvalue()
+        self.assertIn("codex-auto-review", output)
+        self.assertIn("* Includes a qualified codex-auto-review API-equivalent estimate.", output)
+        self.assertRegex(output, r"TOTALS.*\*")
+
     def test_missing_model_without_turn_context_is_unpriced(self):
         """Codex does not guess a priced model when all model metadata is absent."""
         test_filename = self.test_dir / "mock_codex_missing_model.jsonl"

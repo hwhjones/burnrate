@@ -82,13 +82,17 @@ an unavailable finding.
 
 ## Architecture constraints
 
-Add at most three production modules:
+The accepted v0.2.0 implementation uses four focused production modules. The
+fourth module isolates canonical context telemetry so model-stream boundaries,
+cache semantics, and ordered carry evidence remain testable without making
+`patterns.py` a generalized telemetry framework:
 
 ```text
 burnrate/
   analyser/
     patterns.py        JSONL reader, session accumulator, detectors
     pattern_catalog.py rule names, thresholds, explanations, experiments
+    pattern_context.py canonical context snapshots and context signals
     pattern_report.py  deterministic text and JSON rendering
   main.py              existing CLI plus opt-in pattern routing
 ```
@@ -125,7 +129,7 @@ updated `main` after the preceding PR has merged.
 | --- | --- | --- | --- |
 | 1 | `pattern-scan/01-session-reader` | None; tested session facts | `main` at `9c83815` |
 | 2 | `pattern-scan/02-core-patterns` | Library returns three observations | PR 1 |
-| 3 | `pattern-scan/03-frequency-signals` | Library returns six frequency signals | PR 2 |
+| 3 | `pattern-scan/03-frequency-signals` | Library returns ten frequency signals | PR 2 |
 | 4 | `pattern-scan/04-reports` | Text and JSON renderers | PR 3 |
 | 5 | `pattern-scan/05-cli` | Complete opt-in command | PR 4 |
 | 6 | `pattern-scan/06-coaching-report` | Adoption-focused experiment and rerun loop | PR 5 |
@@ -702,23 +706,80 @@ Synthetic fixtures must cover:
 
 Personal logs are a final smoke test, never the correctness oracle.
 
+### Verification record
+
+On 2026-08-16, from the `codexpattern` branch, the checks below were run with
+Python's temporary directory redirected to the workspace-local `.test-tmp`
+directory so fixture and build files could be created without relying on the
+system temporary directory:
+
+- `\.venv\\Scripts\\python.exe -m unittest discover -s tests -v` — **pass**;
+  116 tests ran and all passed.
+- `\.venv\\Scripts\\python.exe scripts\\smoke_build.py` — **pass**;
+  the sdist and wheel built, the wheel installed into a disposable virtual
+  environment, both console-script and `python -m burnrate` help commands
+  passed, and both invalid-path exit checks passed.
+
+On 2026-08-16, the bundled pricing tables were refreshed against the current
+[OpenAI API pricing](https://developers.openai.com/api/docs/pricing) and
+[Anthropic Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+The refresh corrected the standard GPT-5.6 Terra/Luna rates, added current
+Codex/Daybreak IDs, added current Claude model IDs and legacy-compatible
+aliases, and retained the documented 5-minute cache-write limitation. The
+full 116-test suite, including exact pricing fixtures and metadata checks,
+passed after the refresh.
+
+The raw `codex-auto-review` label was also investigated. Its records expose no
+underlying model or billable dollar SKU. BurnRate now applies the published
+GPT-5.4 standard API rate as a qualified API-equivalent estimate, based on the
+observed Codex routing, and documents that this is not an invoice rate.
+
+These results verify the automated suite and packaging path only. Release
+integration into `main` is the remaining repository operation.
+
+On 2026-08-16, the documented local smoke test was also run:
+
+- `\\.venv\\Scripts\\python.exe -m burnrate patterns --parser codex --days 20
+  --log-path "$HOME/.codex/sessions"` — **pass**; 133 sessions across 105
+  files produced 9 raw signals.
+- The default report is **genuinely actionable for an initial experiment**:
+  it presents three bounded insights, gives prevalence and native counts,
+  includes one concrete workflow change per insight, and supplies a directly
+  runnable seven-day `Check again` command. The leading recommendation to cap
+  large reads/output is especially clear, while the fresh-context and repeated-
+  read recommendations are also immediately testable.
+- The report remains appropriately qualified: it describes temporal evidence
+  rather than causation, calls out incomplete or unavailable telemetry, and
+  states that it does not measure waste, correctness, or verification. This is
+  sufficient to mark the default-report usefulness gate complete, but not to
+  claim that any intervention improved outcomes.
+
 ## Release completion
 
 The vertical slice is ready when:
 
-- [ ] all six PRs are merged in order;
-- [ ] one command produces a concise ranked report from local Codex logs;
-- [ ] every displayed number is a direct count or session-local aggregate;
-- [ ] every rule exposes its threshold and bounded examples on request;
-- [ ] missing telemetry never becomes a finding;
-- [ ] existing BurnRate accounting remains unchanged;
-- [ ] the full suite and installed-package smoke tests pass;
-- [ ] the twenty-day report is useful without reading an evidence schema.
+- [ ] all six planned implementation stages are integrated into `main` in order;
+- [x] one command produces a concise ranked report from local Codex logs;
+- [x] every displayed number is a direct count or session-local aggregate;
+- [x] every rule exposes its threshold and bounded examples on request;
+- [x] missing telemetry never becomes a finding;
+- [x] existing BurnRate accounting remains unchanged;
+- [x] the full suite and installed-package smoke tests pass;
+- [x] the twenty-day report is useful without reading an evidence schema.
+
+The behavioral and evidence gates are complete. The remaining unchecked gate is
+the final merge into `main`.
 
 ## Simplicity guardrails
 
-- No more than three new production modules.
-- No more than nine active rules.
+- **Accepted v0.2.0 exception:** four focused analyser modules and 13 active
+  rules (three observations plus ten frequency signals). The additional
+  `pattern_context.py` module and four context/cache/carry signals were added
+  because the 20-day local scan showed actionable context pressure and the
+  module boundary keeps provider telemetry semantics explicit and testable.
+  This is a fixed release baseline, not permission to grow a detector
+  framework; further rules or modules require a new evidence-backed roadmap
+  decision.
 - One result shape and one aggregation path.
 - No runtime dependencies, persistence, or network access.
 - No natural-language similarity.

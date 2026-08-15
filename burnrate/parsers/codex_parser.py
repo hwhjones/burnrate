@@ -343,6 +343,7 @@ class CodexParser(BaseParser):
         total_reasoning_agg = 0
         total_cache_read_agg = 0
         total_cost_agg = 0.0
+        total_cost_includes_estimate = False
 
         for date in sorted(grouped_stats.keys()):
             for model in sorted(grouped_stats[date].keys()):
@@ -352,7 +353,14 @@ class CodexParser(BaseParser):
                 reasoning_t = stats["reasoning"]
                 cache_r = stats["cache_read"]
                 cost_v = stats["cost"]
-                cost_display = f"{cost_v:>18.2f}" if stats["priced"] else f"{'UNPRICED':>18}"
+                is_estimate = model == "codex-auto-review"
+                if is_estimate:
+                    total_cost_includes_estimate = True
+                cost_display = (
+                    f"{cost_v:>17.2f}*" if stats["priced"] and is_estimate
+                    else f"{cost_v:>18.2f}" if stats["priced"]
+                    else f"{'UNPRICED':>18}"
+                )
 
                 total_input_agg += input_t
                 total_output_agg += output_t
@@ -364,7 +372,11 @@ class CodexParser(BaseParser):
 
         # Print totals row
         print(f"{'-'*10} {'-'*28} {'-'*9} {'-'*8} {'-'*9} {'-'*10} {'-'*18}")
-        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_agg:>18.2f}")
+        total_cost_display = (
+            f"{total_cost_agg:>17.2f}*" if total_cost_includes_estimate
+            else f"{total_cost_agg:>18.2f}"
+        )
+        print(f"{'TOTALS':<10} {'':<28} {total_input_agg:>9,} {total_output_agg:>8,} {total_reasoning_agg:>9,} {total_cache_read_agg:>10,} {total_cost_display}")
         print(f"[CODEX] =========================")
 
         # Additional metrics using the overall totals from parsing
@@ -402,5 +414,7 @@ class CodexParser(BaseParser):
             print(f"[CODEX] Projected 30-day API-equivalent USD: ~${projected_30_day_cost:.2f}")
 
         print("[CODEX] Estimates are not provider invoices.")
+        if total_cost_includes_estimate:
+            print("[CODEX] * Includes a qualified codex-auto-review API-equivalent estimate.")
         print("[CODEX] BurnRate does not calculate Codex credit use.")
         print(f"[CODEX] =========================")

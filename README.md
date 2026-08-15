@@ -1,6 +1,12 @@
-# BurnRate
+# BurnRate 0.2.0
 
 BurnRate is a small, dependency-free Python utility that parses Codex and Claude JSONL session logs, summarizes token usage, and estimates cost.
+
+Version 0.2 adds an opt-in, local-only Codex workflow scan while preserving the
+existing usage and cost accounting. It reads session metadata, ranks bounded
+workflow signals, and suggests one experiment to try next. It does not upload
+logs, retain prompt bodies, or claim to measure waste, correctness, or
+verification success.
 
 ## Features
 
@@ -12,12 +18,20 @@ BurnRate is a small, dependency-free Python utility that parses Codex and Claude
 - Report unsupported pricing conditions as unpriced instead of guessing.
 - Read ordinary and BOM-prefixed UTF-8 JSONL files.
 
-## What's new in 0.1.1
+## What's new in 0.2.0
 
 - Hardened token, identity, session-deduplication, and malformed-record handling.
 - Added resilient filesystem diagnostics and meaningful CLI exit statuses.
-- Verified API-equivalent USD rates and made unpriced or partial estimates visible.
-- Corrected build metadata and unified runtime and distribution version reporting.
+- Refreshed OpenAI Codex and Anthropic Claude API-equivalent USD rates and
+  made unpriced or partial estimates visible.
+- Added the `patterns` command for a concise ranked report from local Codex logs.
+- Added `--explain` for thresholds, telemetry coverage, bounded examples, and
+  source references; `--json` exposes the complete machine-readable result.
+- Keeps missing telemetry from becoming a finding and keeps every displayed
+  number a direct count or session-local aggregate.
+- Refreshed current OpenAI and Anthropic API-equivalent pricing tables,
+  including a clearly starred qualified estimate for `codex-auto-review`.
+- Bumped package metadata and release documentation to `0.2.0`.
 
 Known limitation: conditional pricing variants and Codex subscription credits are
 not calculated; estimates use the documented standard API-rate assumptions below.
@@ -62,6 +76,12 @@ active environment:
 python -m pip install -e .
 burnrate patterns --days 20
 ```
+
+The default report is intentionally short: it shows up to three ranked,
+actionable signals and a runnable seven-day follow-up command. Use `--explain`
+when reviewing a finding or validating a rule; it shows the threshold, native
+counts, affected sessions, telemetry requirements, and bounded evidence. Use
+`--json` for automation or to inspect all ranked signals.
 
 If PowerShell still reports that `burnrate` is not recognized, use
 `python -m burnrate ...`; it does not depend on the Scripts directory being on
@@ -134,12 +154,29 @@ retained and the scan is marked incomplete.
 ## Cost estimates
 
 BurnRate reports API-equivalent USD using static model tables bundled with the
-application. Pricing provenance is recorded in `burnrate/pricing.py`. Estimates
-are not provider invoices, and BurnRate does not calculate Codex credit use.
+application. Pricing provenance is recorded in `burnrate/pricing.py`; the
+tables were verified against the current OpenAI API pricing page and Anthropic
+Claude pricing documentation on 2026-08-16. Estimates are not provider
+invoices, and BurnRate does not calculate Codex credit use.
 
-The tables assume their standard published API rates. Claude cache creation uses
-the single bundled cache-write rate. Cache-duration, long-context, geography,
-batch, and other conditional variants are not inferred from logs.
+The tables assume standard first-party API rates. They include current Codex
+models such as GPT-5.6, GPT-5.3-Codex, and Daybreak aliases, and current Claude
+models including Opus 5/4.8/4.7/4.6/4.5, Sonnet 5/4.6/4.5, Haiku 4.5, and the
+current Fable/Mythos 5 entries. Legacy model IDs remain available for
+historical log analysis. Claude cache creation uses the 5-minute cache-write
+rate because logs do not identify cache duration. Cache-duration, long-context,
+regional, batch, fast-mode, and other conditional variants are not inferred
+from logs.
+
+Codex `codex-auto-review` records are priced using the GPT-5.4 standard API
+rate as a qualified API-equivalent estimate. Auto-review is a subscription
+approval/reviewer feature rather than a published API SKU, and its logs do not
+expose the underlying billable model or a separate dollar rate; this estimate
+must not be read as an invoice amount.
+
+CLI rows and totals containing that estimate are marked with `*`, with a
+legend printed below the Codex summary. Treat starred values as directional
+estimates, not provider invoices.
 
 Unknown models and records requiring a token-category rate that is not bundled
 are retained in token totals but shown as `UNPRICED`. Reported cost is then the
