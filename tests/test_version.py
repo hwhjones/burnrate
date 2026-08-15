@@ -8,7 +8,12 @@ import burnrate
 
 class TestVersion(unittest.TestCase):
     def test_installed_version_comes_from_distribution_metadata(self):
-        self.assertEqual(burnrate.__version__, metadata.version("token-burnrate"))
+        try:
+            installed_version = metadata.version("token-burnrate")
+        except metadata.PackageNotFoundError:
+            self.assertEqual(burnrate.__version__, "0+unknown")
+        else:
+            self.assertEqual(burnrate.__version__, installed_version)
 
     def test_uninstalled_source_tree_uses_safe_fallback(self):
         try:
