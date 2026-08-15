@@ -71,6 +71,13 @@ The wheel and source archive are created with:
 python -m build --sdist --wheel
 ```
 
+For maintainers, the repository includes a GitHub Actions release workflow.
+Configure `hwhjones/burnrate` as a PyPI Trusted Publisher for the `pypi`
+environment, then push a version tag such as `v0.2.0`. GitHub will run the
+tests, build both artifacts, and publish them without a stored PyPI password or
+API token. PyPI's Trusted Publishing uses short-lived OIDC credentials for this
+workflow.
+
 BurnRate requires Python 3.9 or newer and has no third-party runtime
 dependencies. After installation, the `burnrate` command is available on the
 user's `PATH`.
