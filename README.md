@@ -51,6 +51,30 @@ python -m venv .venv
 python -m pip install .
 ```
 
+For an end-user installation, install the published release instead of
+cloning the repository:
+
+```powershell
+python -m pip install burnrate==0.2.0
+```
+
+If the release is being distributed before it is on PyPI, give users the wheel
+from the release artifacts and install it directly:
+
+```powershell
+python -m pip install burnrate-0.2.0-py3-none-any.whl
+```
+
+The wheel and source archive are created with:
+
+```powershell
+python -m build --sdist --wheel
+```
+
+BurnRate requires Python 3.9 or newer and has no third-party runtime
+dependencies. After installation, the `burnrate` command is available on the
+user's `PATH`.
+
 ## Usage
 
 After installation, run BurnRate as a command-line tool:
