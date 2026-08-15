@@ -758,7 +758,7 @@ On 2026-08-16, the documented local smoke test was also run:
 
 The vertical slice is ready when:
 
-- [ ] all six planned implementation stages are integrated into `main` in order;
+- [x] all six planned implementation stages are integrated into `main` in order;
 - [x] one command produces a concise ranked report from local Codex logs;
 - [x] every displayed number is a direct count or session-local aggregate;
 - [x] every rule exposes its threshold and bounded examples on request;
@@ -767,8 +767,16 @@ The vertical slice is ready when:
 - [x] the full suite and installed-package smoke tests pass;
 - [x] the twenty-day report is useful without reading an evidence schema.
 
-The behavioral and evidence gates are complete. The remaining unchecked gate is
-the final merge into `main`.
+The behavioral, evidence, and integration gates are complete. The repository is
+ready for the 0.2.0 release verification below.
+
+After the merge into `main` on 2026-08-16, the final verification was repeated:
+
+- `\.venv\\Scripts\\python.exe -m unittest discover -s tests -q` — **pass**;
+  116 tests ran and all passed.
+- `\.venv\\Scripts\\python.exe scripts\\smoke_build.py` — **pass**;
+  the 0.2.0 sdist and wheel built, installed, and passed console-script,
+  module-help, and invalid-path checks in a disposable environment.
 
 ## Simplicity guardrails
 
