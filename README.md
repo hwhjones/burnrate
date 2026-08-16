@@ -67,19 +67,6 @@ python -m venv .venv
 python -m pip install .
 ```
 
-If the release is being distributed before it is on PyPI, give users the wheel
-from the release artifacts and install it directly:
-
-```powershell
-python -m pip install token_burnrate-0.2.0-py3-none-any.whl
-```
-
-The wheel and source archive are created with:
-
-```powershell
-python -m build --sdist --wheel
-```
-
 For maintainers, the repository includes a GitHub Actions release workflow.
 Configure the `hwhjones/burnrate` repository as a PyPI Trusted Publisher for
 the `token-burnrate` project and `pypi` environment, then push a version tag
