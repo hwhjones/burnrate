@@ -43,19 +43,28 @@ not calculated; estimates use the documented standard API-rate assumptions below
 
 ## Installation
 
-Create a virtual environment and install BurnRate from the repository:
+### Install from PyPI (recommended)
+
+Install the published package into any Python 3.9+ environment:
+
+```powershell
+python -m pip install token-burnrate==0.2.0
+```
+
+This installs the `burnrate` command. Verify it with:
+
+```powershell
+burnrate --help
+```
+
+### Install from source (contributors)
+
+Only use a repository install when developing or testing BurnRate itself:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install .
-```
-
-For an end-user installation, install the published release instead of
-cloning the repository:
-
-```powershell
-python -m pip install token-burnrate==0.2.0
 ```
 
 If the release is being distributed before it is on PyPI, give users the wheel
@@ -101,8 +110,7 @@ python -m burnrate patterns --days 20 --explain
 python -m burnrate patterns --days 20 --json
 ```
 
-The `burnrate` executable is available after installing this checkout into the
-active environment:
+The `burnrate` executable is also available after an editable source install:
 
 ```powershell
 python -m pip install -e .
